@@ -19,6 +19,9 @@ os_set_flags()
 # macro definition located at "CMake/global_config.cmake"
 global_set_flags()
 
+# Disable OPENMP, see issue 1105
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBUILD_WITH_OPENMP=false")
+
 find_package(catkin REQUIRED)
 
 if(BUILD_SHARED_LIBS)
