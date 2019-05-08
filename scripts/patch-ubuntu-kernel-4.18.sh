@@ -5,7 +5,7 @@ set -e
 
 #trap read debug
 
-echo -e "\e[36mDevelopment script for kernel 4.16 with metadata node\e[0m"
+echo -e "\e[36mDevelopment script for kernel 4.18 with metadata node\e[0m"
 
 #Locally suppress stderr to avoid raising not relevant messages
 exec 3>&2
@@ -25,7 +25,7 @@ source ./scripts/patch-utils.sh
 
 # Get the required tools and headers to build the kernel
 sudo apt-get install linux-headers-generic build-essential git
-#Packages to build the patched modules / kernel 4.16
+#Packages to build the patched modules / kernel 4.18
 require_package libusb-1.0-0-dev
 require_package libssl-dev
 require_package bison
@@ -49,6 +49,7 @@ minor=$(uname -r | cut -d '.' -f 2)
 if [ $minor -ne 18 ];
 then 
 	echo -e "\e[43mThe patch is applicable for kernel version 4.18. \n/
+  For version 4.16 pelase use patch-ubuntu-kernel-4.16.sh. \n/
 	For earlier kernels please use patch-realsense-ubuntu-lts.sh script \e[0m"
 	exit 1
 fi
@@ -88,9 +89,9 @@ then
 	else
 		echo -e "\e[0m"
 		echo -e "\e[32mUpdate the folder content with the latest from mainline branch\e[0m"
-		git fetch origin $kernel_branch --depth 1
+		git fetch origin hwe --depth 1
 		printf "Resetting local changes in %s folder\n " ${kernel_name}
-		git reset --hard $kernel_branch
+		git reset --hard hwe
 	fi
 fi
 
@@ -110,6 +111,7 @@ else
 	# patch -p1 < ../scripts/realsense-hid-ubuntu-${ubuntu_codename}-${kernel_major_minor}.patch
 	# echo -e "\e[32mApplying realsense-powerlinefrequency-fix patch\e[0m"
 	# patch -p1 < ../scripts/realsense-powerlinefrequency-control-fix.patch
+  # Only this patch is necessary for 4.18
 	echo -e "\e[32mApplying realsense-metadata-ubuntu-xenial-v4.16\e[0m"
 	patch -p1 < ../scripts/realsense-metadata-ubuntu-xenial-v4.16.patch
 
