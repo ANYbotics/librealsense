@@ -23,8 +23,10 @@ fi
 #Include usability functions
 source ./scripts/patch-utils.sh
 
+kernel_type=$(uname -r | cut -d '-' -f 3)
+
 # Get the required tools and headers to build the kernel
-sudo apt-get install linux-headers-generic build-essential git
+sudo apt-get install linux-headers-${kernel_type} build-essential git
 #Packages to build the patched modules / kernel 4.18
 require_package libusb-1.0-0-dev
 require_package libssl-dev
@@ -49,7 +51,7 @@ minor=$(uname -r | cut -d '.' -f 2)
 if [ $minor -ne 18 ];
 then 
 	echo -e "\e[43mThe patch is applicable for kernel version 4.18. \n/
-  For version 4.16 pelase use patch-ubuntu-kernel-4.16.sh. \n/
+	For version 4.16 pelase use patch-ubuntu-kernel-4.16.sh. \n/
 	For earlier kernels please use patch-realsense-ubuntu-lts.sh script \e[0m"
 	exit 1
 fi
