@@ -19,8 +19,11 @@ fi
 #Include usability functions
 source ./scripts/patch-utils.sh
 
+# generic or lowlateny
+kernel_type=$(uname -r | cut -d '-' -f 3)
+
 # Get the required tools and headers to build the kernel
-sudo apt-get install linux-headers-generic build-essential git
+sudo apt-get install linux-headers-${kernel_type} build-essential git
 #Packages to build the patched modules
 require_package libusb-1.0-0-dev
 require_package libssl-dev
@@ -28,7 +31,7 @@ require_package libssl-dev
 retpoline_retrofit=0
 
 LINUX_BRANCH=$(uname -r)
-
+minor=$(uname -r | cut -d '.' -f 2)
 
 # Construct branch name from distribution codename {xenial,bionic,..} and kernel version
 ubuntu_codename=`. /etc/os-release; echo ${UBUNTU_CODENAME/*, /}`
@@ -84,19 +87,30 @@ if [ $reset_driver -eq 1 ];
 then 
 	echo -e "\e[43mUser requested to rebuild and reinstall ubuntu-${ubuntu_codename} stock drivers\e[0m"
 else
-	# Patching kernel for RealSense devices
-	echo -e "\e[32mApplying realsense-uvc patch\e[0m"
-	patch -p1 < ../scripts/realsense-camera-formats_ubuntu-${ubuntu_codename}-${kernel_branch}.patch
-	echo -e "\e[32mApplying realsense-metadata patch\e[0m"
-	patch -p1 < ../scripts/realsense-metadata-ubuntu-${ubuntu_codename}-${kernel_branch}.patch
-	echo -e "\e[32mApplying realsense-hid patch\e[0m"
-	patch -p1 < ../scripts/realsense-hid-ubuntu-${ubuntu_codename}-${kernel_branch}.patch
-	echo -e "\e[32mApplying realsense-powerlinefrequency-fix patch\e[0m"
-	patch -p1 < ../scripts/realsense-powerlinefrequency-control-fix.patch
-	# Applying 3rd-party patch that affects USB2 behavior
-	# See reference https://patchwork.kernel.org/patch/9907707/
-	echo -e "\e[32mRetrofit uvc bug fix enabled with 4.18+\e[0m"
-	patch -p1 < ../scripts/v1-media-uvcvideo-mark-buffer-error-where-overflow.patch
+
+	if [ ${ubuntu_codename} == "bionic" && [ ${minor} == "18" ] ];
+	then
+		# For Ubuntu 18.04 with Kernel v4.18 we can use these two patches
+		echo -e "\e[32mApplying realsense-metadata-ubuntu-xenial-v4.16\e[0m"
+		patch -p1 < ../scripts/realsense-metadata-ubuntu-xenial-v4.16.patch
+		echo -e "\e[32mApplying realsense-hid-ubuntu-xenial-v4.16\e[0m"
+		patch -p1 < ../scripts/realsense-hid-ubuntu-xenial-v4.16.patch
+	else
+
+		# Patching kernel for RealSense devices
+		echo -e "\e[32mApplying realsense-uvc patch\e[0m"
+		patch -p1 < ../scripts/realsense-camera-formats_ubuntu-${ubuntu_codename}-${kernel_branch}.patch
+		echo -e "\e[32mApplying realsense-metadata patch\e[0m"
+		patch -p1 < ../scripts/realsense-metadata-ubuntu-${ubuntu_codename}-${kernel_branch}.patch
+		echo -e "\e[32mApplying realsense-hid patch\e[0m"
+		patch -p1 < ../scripts/realsense-hid-ubuntu-${ubuntu_codename}-${kernel_branch}.patch
+		echo -e "\e[32mApplying realsense-powerlinefrequency-fix patch\e[0m"
+		patch -p1 < ../scripts/realsense-powerlinefrequency-control-fix.patch
+		# Applying 3rd-party patch that affects USB2 behavior
+		# See reference https://patchwork.kernel.org/patch/9907707/
+		echo -e "\e[32mRetrofit uvc bug fix enabled with 4.18+\e[0m"
+		patch -p1 < ../scripts/v1-media-uvcvideo-mark-buffer-error-where-overflow.patch
+	fi
 fi
 
 # Copy configuration

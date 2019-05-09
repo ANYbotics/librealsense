@@ -74,9 +74,12 @@ function choose_kernel_branch {
 		"15")								 	# kernel 4.15 for Ubuntu 18/Bionic Beaver
 			echo master
 			;;
+		"18")								 	# kernel 4.15 for Ubuntu 18/Bionic Beaver
+			echo hwe
+			;;
 		*)
 			#error message shall be redirected to stderr to be printed properly
-			echo -e "\e[31mUnsupported kernel version $1 . The patches are maintained for Ubuntu Bionic LTS with kernel 4.15 only\e[0m" >&2
+			echo -e "\e[31mUnsupported kernel version $1 . The patches are maintained for Ubuntu Bionic LTS with kernel 4.15 and 4.18 only\e[0m" >&2
 			exit 1
 			;;
 		esac

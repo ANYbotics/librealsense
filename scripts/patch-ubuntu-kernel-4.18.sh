@@ -48,7 +48,7 @@ then
 fi
 
 minor=$(uname -r | cut -d '.' -f 2)
-if [ $minor -ne 18 ];
+if [ $minor -ne 18 ] || [ [ $kernel_type -ne lowlatency] && [ $minor -ne 15] ];
 then 
 	echo -e "\e[43mThe patch is applicable for kernel version 4.18. \n/
 	For version 4.16 pelase use patch-ubuntu-kernel-4.16.sh. \n/
@@ -56,7 +56,8 @@ then
 	exit 1
 fi
 
-kernel_branch=$(uname -r | awk -F '[.-]' '{print "v"$1"."$2"."$3}')
+#kernel_branch=$(uname -r | awk -F '[.-]' '{print "v"$1"."$2"."$3}')
+kernel_branch=$(choose_kernel_branch ${LINUX_BRANCH} ${ubuntu_codename})
 kernel_major_minor=$(uname -r | awk -F '[.-]' '{print "v"$1"."$2}')
 kernel_name="ubuntu-${ubuntu_codename}-$kernel_branch"
 
@@ -68,9 +69,12 @@ then
 	require_package elfutils
 fi
 
+echo "Cloning: $kernel_branch git://kernel.ubuntu.com/ubuntu/ubuntu-${ubuntu_codename}.git "
 
 # Get the linux kernel and change into source tree
-[ ! -d ${kernel_name} ] && git clone -b hwe git://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/bionic --depth 1 ./${kernel_name}
+[ ! -d ${kernel_name} ] && git clone -b $kernel_branch git://kernel.ubuntu.com/ubuntu/ubuntu-${ubuntu_codename}.git --depth 1 ./${kernel_name}
+
+#[ ! -d ${kernel_name} ] && git clone -b hwe git://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux/+git/bionic --depth 1 ./${kernel_name}
 
 cd ${kernel_name}
 
