@@ -2,6 +2,27 @@
 cmake_minimum_required(VERSION 3.1.0)
 project(librealsense2 LANGUAGES CXX C)
 
+include(CMake/lrs_options.cmake)
+include(CMake/connectivity_check.cmake)
+
+#Deprecation message, should be removed in future releases
+if(${FORCE_LIBUVC} OR ${FORCE_WINUSB_UVC} OR ${ANDROID_USB_HOST_UVC})
+    MESSAGE(DEPRECATION "FORCE_LIBUVC, FORCE_WINUSB_UVC and ANDROID_USB_HOST_UVC are deprecated, use FORCE_RSUSB_BACKEND instead")
+    set(FORCE_RSUSB_BACKEND ON)
+endif()
+
+# Checking Internet connection, as TM2 needs to download the FW from amazon cloud
+if(BUILD_WITH_TM2 AND NOT INTERNET_CONNECTION)
+    message(WARNING "No internet connection, disabling BUILD_WITH_TM2")
+    set(BUILD_WITH_TM2 OFF)
+endif()
+
+# Checking Internet connection, as TM2 needs to download the FW from amazon cloud
+if(IMPORT_DEPTH_CAM_FW AND NOT INTERNET_CONNECTION)
+    message(WARNING "No internet connection, disabling IMPORT_DEPTH_CAM_FW")
+    set(IMPORT_DEPTH_CAM_FW OFF)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/CMake)
 
 # include librealsense general configuration
@@ -40,11 +61,6 @@ endif()
 # set library version
 set_target_properties(${LRS_TARGET} PROPERTIES VERSION ${REALSENSE_VERSION_STRING} SOVERSION "${REALSENSE_VERSION_MAJOR}.${REALSENSE_VERSION_MINOR}")
 
-# Checking Internet connection, as TM2 needs to download the FW from amazon cloud
-if(BUILD_WITH_TM2)
-    include(CMake/tm2_connectivity_check.cmake)
-endif()
-
 include(include/CMakeLists.txt)
 include(src/CMakeLists.txt)
 include(third-party/CMakeLists.txt)
@@ -56,16 +72,19 @@ os_target_config()
 # global project configuration
 # macro definition located at "CMake/global_config.cmake"
 global_target_config()
-option(BUILD_CV_KINFU_EXAMPLE "Build OpenCV KinectFusion example" OFF)
+
+include(CMake/install_config.cmake)
 
 add_subdirectory(wrappers)
 
-if (BUILD_EXAMPLES AND BUILD_GRAPHICAL_EXAMPLES)
+if (BUILD_EXAMPLES AND BUILD_GLSL_EXTENSIONS)
     find_package(glfw3 3.3 QUIET)
     if(NOT TARGET glfw)
         message(STATUS "GLFW 3.3 not found; using internal version")
+        set(GLFW_INSTALL ON CACHE BOOL "" FORCE)
         add_subdirectory(third-party/glfw)
     endif()
+    add_subdirectory(src/gl)
 endif()
 
 if(BUILD_EXAMPLES)
@@ -77,27 +96,12 @@ if(BUILD_UNIT_TESTS)
     add_subdirectory(unit-tests)
 endif()
 
-if (BUILD_WITH_TM2)
+if(BUILD_WITH_TM2)
     add_tm2()
 endif()
 
-include(CMake/install_config.cmake)
+if(IMPORT_DEPTH_CAM_FW)
+    add_subdirectory(common/fw)
+endif()
 
-catkin_package(
-  INCLUDE_DIRS
-    include
-  LIBRARIES
-    ${LRS_TARGET}
-)
-
-install(
-  DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  PATTERN ".svn" EXCLUDE
-)
-install(
-  TARGETS ${LRS_TARGET}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+include(CMake/embedd_udev_rules.cmake)

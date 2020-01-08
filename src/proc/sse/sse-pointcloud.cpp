@@ -1,6 +1,18 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+
+#include "../include/librealsense2/rs.hpp"
+#include "../include/librealsense2/rsutil.h"
+
+#include "proc/synthetic-stream.h"
+#include "environment.h"
+#include "proc/occlusion-filter.h"
 #include "proc/sse/sse-pointcloud.h"
+#include "option.h"
+#include "environment.h"
+#include "context.h"
+
+#include <iostream>
 
 #ifdef __SSSE3__
 
@@ -10,7 +22,7 @@
 
 namespace librealsense
 {
-    pointcloud_sse::pointcloud_sse() : pointcloud() {}
+    pointcloud_sse::pointcloud_sse() : pointcloud("Pointcloud (SSE3)") {}
 
     void pointcloud_sse::preprocess()
     {
@@ -44,19 +56,20 @@ namespace librealsense
     }
 
     const float3* pointcloud_sse::depth_to_points(rs2::points output,
-            uint8_t* points, 
             const rs2_intrinsics &depth_intrinsics, 
-            const uint16_t * depth_image, 
+            const rs2::depth_frame& depth_frame,
             float depth_scale)
     {
 #ifdef __SSSE3__
+
+        auto depth_image = (const uint16_t*)depth_frame.get_data();
 
         float* pre_compute_x = _pre_compute_map_x.data();
         float* pre_compute_y = _pre_compute_map_y.data();
 
         uint32_t size = depth_intrinsics.height * depth_intrinsics.width;
 
-        auto point = reinterpret_cast<float*>(points);
+        auto point = (float*)output.get_vertices();
 
         //mask for shuffle
         const __m128i mask0 = _mm_set_epi8((char)0xff, (char)0xff, (char)7, (char)6, (char)0xff, (char)0xff, (char)5, (char)4,
@@ -123,7 +136,7 @@ namespace librealsense
             point += 24;
         }
 #endif
-        return reinterpret_cast<float3*>(points);
+        return (float3*)output.get_vertices();
     }
 
     void pointcloud_sse::get_texture_map(rs2::points output,
@@ -132,9 +145,10 @@ namespace librealsense
         const unsigned int height,
         const rs2_intrinsics &other_intrinsics,
         const rs2_extrinsics& extr,
-        float2* tex_ptr,
         float2* pixels_ptr)
     {
+        auto tex_ptr = (float2*)output.get_texture_coordinates();
+
 #ifdef __SSSE3__
         auto point = reinterpret_cast<const float*>(points);
         auto res = reinterpret_cast<float*>(tex_ptr);
@@ -163,7 +177,7 @@ namespace librealsense
         auto ppy = _mm_set_ps1(other_intrinsics.ppy);
         auto w = _mm_set_ps1(other_intrinsics.width);
         auto h = _mm_set_ps1(other_intrinsics.height);
-        auto mask_brown_conrady = _mm_set_ps1(RS2_DISTORTION_MODIFIED_BROWN_CONRADY);
+        auto mask_inv_brown_conrady = _mm_set_ps1(RS2_DISTORTION_INVERSE_BROWN_CONRADY);
         auto zero = _mm_set_ps1(0);
         auto one = _mm_set_ps1(1);
         auto two = _mm_set_ps1(2);
@@ -207,7 +221,7 @@ namespace librealsense
             auto r5 = _mm_mul_ps(c[2], _mm_add_ps(r2, _mm_mul_ps(two, _mm_mul_ps(y_f, y_f))));
             auto d_y = _mm_add_ps(y_f, _mm_add_ps(_mm_mul_ps(two, _mm_mul_ps(c[3], _mm_mul_ps(x_f, y_f))), r4));
 
-            auto cmp = _mm_cmpeq_ps(mask_brown_conrady, dist);
+            auto cmp = _mm_cmpeq_ps(mask_inv_brown_conrady, dist);
 
             p_x = _mm_or_ps(_mm_and_ps(cmp, d_x), _mm_andnot_ps(cmp, p_x));
             p_y = _mm_or_ps(_mm_and_ps(cmp, d_y), _mm_andnot_ps(cmp, p_y));

@@ -106,10 +106,14 @@ namespace librealsense
                 if (!ivcam2::try_fetch_usb_device(group.usb_devices, depth, hwm))
                     LOG_WARNING("try_fetch_usb_device(...) failed.");
 
-                if (g.second.size() < 2)
-                {
-                    LOG_WARNING("L500 partial enum: " << g.second.size() << " HID devices were recognized (2+ expected)");
-                }
+                if(g.first[0].pid != L500_PID)
+                    if (g.second.size() < 2)
+                    {
+                        LOG_WARNING("L500 partial enum: " << g.second.size() << " HID devices were recognized (2+ expected)");
+#if !defined(ANDROID) && !defined(__APPLE__) // Not supported by android & macos
+                        continue;
+#endif // Not supported by android & macos
+                    }
 
                 auto info = std::make_shared<l500_info>(ctx, g.first, hwm, g.second);
                 chosen.push_back(depth);
@@ -138,8 +142,11 @@ namespace librealsense
 
     std::shared_ptr<matcher> rs515_device::create_matcher(const frame_holder & frame) const
     {
+        std::vector<stream_interface*> mm_streams = { _accel_stream.get(), _gyro_stream.get() };
+
         std::vector<std::shared_ptr<matcher>> matchers = { l500_depth::create_matcher(frame),
-            std::make_shared<identity_matcher>(_color_stream->get_unique_id(), _color_stream->get_stream_type()) };
+            std::make_shared<identity_matcher>(_color_stream->get_unique_id(), _color_stream->get_stream_type()), 
+            matcher_factory::create(RS2_MATCHER_DEFAULT, mm_streams) };
 
         return std::make_shared<timestamp_composite_matcher>(matchers);
 

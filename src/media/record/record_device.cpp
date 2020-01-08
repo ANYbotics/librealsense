@@ -5,6 +5,7 @@
 #include <core/motion.h>
 #include <core/advanced_mode.h>
 #include "record_device.h"
+#include "l500/l500-depth.h"
 
 using namespace librealsense;
 
@@ -238,6 +239,7 @@ device_serializer::snapshot_collection librealsense::record_device::get_extensio
             //case RS2_EXTENSION_VIDEO           : try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_VIDEO          >::type>(extendable, snapshots); break;
             //case RS2_EXTENSION_ROI             : try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_ROI            >::type>(extendable, snapshots); break;
             case RS2_EXTENSION_DEPTH_SENSOR    : try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_DEPTH_SENSOR   >::type>(extendable, snapshots); break;
+            case RS2_EXTENSION_L500_DEPTH_SENSOR : try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_L500_DEPTH_SENSOR   >::type>(extendable, snapshots); break;
             case RS2_EXTENSION_DEPTH_STEREO_SENSOR: try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_DEPTH_STEREO_SENSOR   >::type>(extendable, snapshots); break;
             //case RS2_EXTENSION_ADVANCED_MODE   : try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_ADVANCED_MODE  >::type>(extendable, snapshots); break;
             case RS2_EXTENSION_RECOMMENDED_FILTERS: try_add_snapshot<T, ExtensionToType<RS2_EXTENSION_RECOMMENDED_FILTERS   >::type>(extendable, snapshots); break;
@@ -250,7 +252,7 @@ device_serializer::snapshot_collection librealsense::record_device::get_extensio
             case RS2_EXTENSION_COUNT           : break;
             case RS2_EXTENSION_UNKNOWN         : break;
             default:
-                LOG_WARNING("Extensions type is unhandled: " << ext);
+                LOG_WARNING("Extensions type is unhandled: " << get_string(ext));
         }
     }
     return snapshots;
@@ -359,7 +361,7 @@ bool librealsense::record_device::extend_to(rs2_extension extension_type, void**
     case RS2_EXTENSION_DEBUG           : return extend_to_aux<RS2_EXTENSION_DEBUG          >(m_device, ext);
     //Other cases are not extensions that we expect a device to have.
     default:
-        LOG_WARNING("Extensions type is unhandled: " << extension_type);
+        LOG_WARNING("Extensions type is unhandled: " << get_string(extension_type));
         return false;
     }
 }

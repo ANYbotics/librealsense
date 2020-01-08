@@ -4,18 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Device extends LrsClass {
+    private List<Sensor> _sensors = new ArrayList<>();
 
-    public Device(long handle){
+    Device(long handle){
         mHandle = handle;
+        long[] sensorsHandles = nQuerySensors(mHandle);
+        for(long h : sensorsHandles){
+            _sensors.add(new Sensor(h));
+        }
     }
 
     public List<Sensor> querySensors(){
-        long[] sensorsHandles = nQuerySensors(mHandle);
-        List<Sensor> rv = new ArrayList<>();
-        for(long h : sensorsHandles){
-            rv.add(new Sensor(h));
-        }
-        return rv;
+        return _sensors;
     }
 
     public boolean supportsInfo(CameraInfo info){
@@ -42,9 +42,28 @@ public class Device extends LrsClass {
         return nSerializePresetToJson(mHandle);
     }
 
+    public boolean is(Extension extension) {
+        return nIsDeviceExtendableTo(mHandle, extension.value());
+    }
+
+    public <T extends Device> T as(Extension extension) {
+        switch (extension){
+            case UPDATABLE: return (T) new Updatable(mHandle);
+            case UPDATE_DEVICE: return (T) new UpdateDevice(mHandle);
+        }
+        throw new RuntimeException("this device is not extendable to " + extension.name());
+    }
+
+    public void hardwareReset(){
+        nHardwareReset(mHandle);
+    }
+
     @Override
     public void close() {
-        nRelease(mHandle);
+        for (Sensor s : _sensors)
+            s.close();
+        if(mOwner)
+            nRelease(mHandle);
     }
 
     private static native boolean nSupportsInfo(long handle, int info);
@@ -54,5 +73,7 @@ public class Device extends LrsClass {
     private static native void nLoadPresetFromJson(long handle, byte[] data);
     private static native byte[] nSerializePresetToJson(long handle);
     private static native long[] nQuerySensors(long handle);
+    private static native void nHardwareReset(long handle);
+    private static native boolean nIsDeviceExtendableTo(long handle, int extension);
     private static native void nRelease(long handle);
 }

@@ -37,7 +37,6 @@ namespace librealsense
         std::vector<uint8_t> get_raw_intrinsics_table() const;
         std::vector<uint8_t> get_raw_extrinsics_table() const;
     };
-    
 
     class l500_color_sensor : public uvc_sensor, public video_sensor_interface
         {
@@ -53,7 +52,7 @@ namespace librealsense
                 using namespace ivcam2;
 
                 auto intrinsic = check_calib<intrinsic_rgb>(*_owner->_color_intrinsics_table_raw);
-                
+
                 auto num_of_res = intrinsic->resolution.num_of_resolutions;
 
                 for (auto i = 0; i < num_of_res; i++)
@@ -68,6 +67,18 @@ namespace librealsense
                         intrinsics.fy = model.ipm.focal_length.y;
                         intrinsics.ppx = model.ipm.principal_point.x;
                         intrinsics.ppy = model.ipm.principal_point.y;
+
+                        if (model.distort.radial_k1 || model.distort.radial_k2 || model.distort.tangential_p1  || model.distort.tangential_p2 || model.distort.radial_k3)
+                        {
+                            intrinsics.coeffs[0] = model.distort.radial_k1;
+                            intrinsics.coeffs[1] = model.distort.radial_k2;
+                            intrinsics.coeffs[2] = model.distort.tangential_p1;
+                            intrinsics.coeffs[3] = model.distort.tangential_p2;
+                            intrinsics.coeffs[4] = model.distort.radial_k3;
+
+                            intrinsics.model = RS2_DISTORTION_INVERSE_BROWN_CONRADY;
+                        }
+                        
                         return intrinsics;
                     }
                 }

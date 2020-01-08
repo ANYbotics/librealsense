@@ -18,7 +18,7 @@ namespace librealsense
         _source.set_callback(callback);
     }
 
-    processing_block::processing_block(std::string name) :
+    processing_block::processing_block(const char* name) :
         _source_wrapper(_source)
     {
         register_option(RS2_OPTION_FRAMES_QUEUE_SIZE, _source.get_published_size_option());
@@ -45,8 +45,8 @@ namespace librealsense
         }
     }
 
-    generic_processing_block::generic_processing_block(std::string name)
-        :processing_block(name)
+    generic_processing_block::generic_processing_block(const char* name)
+        : processing_block(name)
     {
         auto on_frame = [this](rs2::frame f, const rs2::frame_source& source)
         {
@@ -120,7 +120,7 @@ namespace librealsense
 
         std::vector<rs2::frame> original_set;
         if (auto composite = input.as<rs2::frameset>())
-            composite.foreach([&](const rs2::frame& frame)
+            composite.foreach_rs([&](const rs2::frame& frame)
             {
                 auto format = frame.get_profile().format();
                 if (depth_result_frame && (format == RS2_FORMAT_DISPARITY32 || format == RS2_FORMAT_DISPARITY16))
@@ -151,8 +151,8 @@ namespace librealsense
         return source.allocate_composite_frame(results);
     }
 
-    stream_filter_processing_block::stream_filter_processing_block(std::string name)
-        :generic_processing_block(name)
+    stream_filter_processing_block::stream_filter_processing_block(const char* name)
+        : generic_processing_block(name)
     {
         register_option(RS2_OPTION_FRAMES_QUEUE_SIZE, _source.get_published_size_option());
         _source.init(std::shared_ptr<metadata_parser_map>());
@@ -189,7 +189,7 @@ namespace librealsense
             _stream_filter.format = static_cast<rs2_format>((int)val);
         });
 
-        auto index_selector = std::make_shared<ptr_option<int>>(0, std::numeric_limits<int>::max(), 1, -1, &_stream_filter.index, "Stream index");
+        auto index_selector = std::make_shared<ptr_option<int>>(-1, std::numeric_limits<int>::max(), 1, -1, &_stream_filter.index, "Stream index");
         index_selector->on_set([this, index_selector](float val)
         {
             std::lock_guard<std::mutex> lock(_mutex);

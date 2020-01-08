@@ -26,6 +26,16 @@ Java_com_intel_realsense_librealsense_Frame_nGetStreamProfile(JNIEnv *env, jclas
     return (jlong) rv;
 }
 
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_intel_realsense_librealsense_Frame_nGetDataSize(JNIEnv *env, jclass type, jlong handle) {
+
+    rs2_error *e = NULL;
+    auto rv = rs2_get_frame_data_size(reinterpret_cast<const rs2_frame *>(handle), &e);
+    handle_error(env, e);
+    return (jint)rv;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_intel_realsense_librealsense_Frame_nGetData(JNIEnv *env, jclass type, jlong handle,
                                                      jbyteArray data_) {
@@ -33,6 +43,29 @@ Java_com_intel_realsense_librealsense_Frame_nGetData(JNIEnv *env, jclass type, j
     rs2_error *e = NULL;
     env->SetByteArrayRegion(data_, 0, length, static_cast<const jbyte *>(rs2_get_frame_data(
                 reinterpret_cast<const rs2_frame *>(handle), &e)));
+    handle_error(env, e);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_intel_realsense_librealsense_Points_nGetData(JNIEnv *env, jclass type, jlong handle,
+                                                      jfloatArray data_) {
+    jsize length = env->GetArrayLength(data_);
+    rs2_error *e = NULL;
+    env->SetFloatArrayRegion(data_, 0, length, static_cast<const jfloat *>(rs2_get_frame_data(
+            reinterpret_cast<const rs2_frame *>(handle), &e)));
+    handle_error(env, e);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_intel_realsense_librealsense_Points_nGetTextureCoordinates(JNIEnv *env, jclass type,
+                                                                    jlong handle,
+                                                                    jfloatArray data_) {
+    jsize length = env->GetArrayLength(data_);
+    rs2_error *e = NULL;
+    env->SetFloatArrayRegion(data_, 0, length, reinterpret_cast<const jfloat *>(rs2_get_frame_texture_coordinates(
+            reinterpret_cast<const rs2_frame *>(handle), &e)));
     handle_error(env, e);
 }
 
@@ -103,6 +136,18 @@ Java_com_intel_realsense_librealsense_Points_nGetCount(JNIEnv *env, jclass type,
     int rv = rs2_get_frame_points_count(reinterpret_cast<const rs2_frame *>(handle), &e);
     handle_error(env, e);
     return rv;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_intel_realsense_librealsense_Points_nExportToPly(JNIEnv *env, jclass type, jlong handle,
+                                                          jstring filePath_, jlong textureHandle) {
+    const char *filePath = env->GetStringUTFChars(filePath_, 0);
+    rs2_error *e = NULL;
+    rs2_export_to_ply(reinterpret_cast<const rs2_frame *>(handle), filePath,
+                      reinterpret_cast<rs2_frame *>(textureHandle), &e);
+    handle_error(env, e);
+    env->ReleaseStringUTFChars(filePath_, filePath);
 }
 
 extern "C" JNIEXPORT jdouble JNICALL

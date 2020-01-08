@@ -51,6 +51,13 @@ add_custom_command(TARGET live-test POST_BUILD
     ${Deployment_Location}
 )
 
+# copy wheel odometry calibration file to build folder
+add_custom_command(TARGET live-test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/calibration_odometry.json
+    ${CMAKE_CURRENT_BINARY_DIR}/calibration_odometry.json
+)
+
 #Post-Processing data set for unit-tests
 #message(STATUS "Post processing deployment directory=${Deployment_Location}")
 list(APPEND PP_Tests_List  1551257764229 # D415_DS(2)
@@ -181,3 +188,7 @@ foreach(i ${PP_Rosbag_Recordings_List})
         file(DOWNLOAD "${PP_Rosbag_Recordings_URL}${i}" "${Deployment_Location}${i}" TIMEOUT 600 STATUS status LOG log)
     endif()
 endforeach(i)
+
+if(NOT ${BUILD_SHARED_LIBS} AND ${BUILD_INTERNAL_UNIT_TESTS})
+    add_subdirectory(internal)
+endif()

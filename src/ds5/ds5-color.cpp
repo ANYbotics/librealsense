@@ -16,6 +16,7 @@
 #include "ds5-private.h"
 #include "ds5-options.h"
 #include "ds5-timestamp.h"
+#include "global_timestamp_reader.h"
 #include "environment.h"
 
 namespace librealsense
@@ -45,24 +46,42 @@ namespace librealsense
     {
         auto&& backend = ctx->get_backend();
         std::unique_ptr<frame_timestamp_reader> ds5_timestamp_reader_backup(new ds5_timestamp_reader(backend.create_time_service()));
+        std::unique_ptr<frame_timestamp_reader> ds5_timestamp_reader_metadata(new ds5_timestamp_reader_from_metadata(std::move(ds5_timestamp_reader_backup)));
 
+        auto enable_global_time_option = std::shared_ptr<global_time_option>(new global_time_option());
         auto color_ep = std::make_shared<ds5_color_sensor>(this, backend.create_uvc_device(color_devices_info.front()),
-            std::unique_ptr<frame_timestamp_reader>(new ds5_timestamp_reader_from_metadata(move(ds5_timestamp_reader_backup))));
+            std::unique_ptr<frame_timestamp_reader>(new global_timestamp_reader(std::move(ds5_timestamp_reader_metadata), _tf_keeper, enable_global_time_option)));
 
         _color_device_idx = add_sensor(color_ep);
 
+        color_ep->register_option(RS2_OPTION_GLOBAL_TIME_ENABLED, enable_global_time_option);
         color_ep->register_pixel_format(pf_yuyv);
         color_ep->register_pixel_format(pf_yuy2);
         color_ep->register_pixel_format(pf_bayer16);
+        color_ep->register_pixel_format(pf_uyvyc);
 
-        color_ep->register_pu(RS2_OPTION_BACKLIGHT_COMPENSATION);
         color_ep->register_pu(RS2_OPTION_BRIGHTNESS);
         color_ep->register_pu(RS2_OPTION_CONTRAST);
+        color_ep->register_pu(RS2_OPTION_SATURATION);
         color_ep->register_pu(RS2_OPTION_GAIN);
         color_ep->register_pu(RS2_OPTION_GAMMA);
-        color_ep->register_pu(RS2_OPTION_HUE);
-        color_ep->register_pu(RS2_OPTION_SATURATION);
         color_ep->register_pu(RS2_OPTION_SHARPNESS);
+
+        // Currently disabled for certain sensors
+        if (!val_in_range(color_devices_info.front().pid, { ds::RS465_PID }))
+        {
+            color_ep->register_pu(RS2_OPTION_HUE);
+            color_ep->register_pu(RS2_OPTION_BACKLIGHT_COMPENSATION);
+            color_ep->register_pu(RS2_OPTION_AUTO_EXPOSURE_PRIORITY);
+        }
+        // From 5.11.15 auto-exposure priority is supported on the D465
+        else if (_fw_version >= firmware_version("5.11.15.0")) 
+        {
+            color_ep->register_pu(RS2_OPTION_AUTO_EXPOSURE_PRIORITY);
+        }
+
+        if (color_devices_info.front().pid == ds::RS465_PID)
+            color_ep->register_pixel_format(pf_mjpg);
 
         auto white_balance_option = std::make_shared<uvc_pu_option>(*color_ep, RS2_OPTION_WHITE_BALANCE);
         auto auto_white_balance_option = std::make_shared<uvc_pu_option>(*color_ep, RS2_OPTION_ENABLE_AUTO_WHITE_BALANCE);
@@ -88,8 +107,6 @@ namespace librealsense
                 { 1.f, "50Hz" },
                 { 2.f, "60Hz" },
                 { 3.f, "Auto" }, }));
-
-        color_ep->register_pu(RS2_OPTION_AUTO_EXPOSURE_PRIORITY);
 
         color_ep->register_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP, make_uvc_header_parser(&platform::uvc_header::timestamp));
         color_ep->register_metadata(RS2_FRAME_METADATA_ACTUAL_FPS,  std::make_shared<ds5_md_attribute_actual_fps> (false, [](const rs2_metadata_type& param)

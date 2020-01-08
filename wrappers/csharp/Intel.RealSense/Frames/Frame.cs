@@ -129,6 +129,17 @@ namespace Intel.RealSense
             }
         }
 
+        /// <summary>Gets the size of the frame data</summary>
+        /// <value>The size of the frame data</value>
+        public int DataSize
+        {
+            get
+            {
+                object error;
+                return NativeMethods.rs2_get_frame_data_size(Handle, out error);
+            }
+        }
+
         /// <summary>Gets a pointer to the frame data</summary>
         /// <value>pointer to the start of the frame data</value>
         public IntPtr Data
@@ -178,6 +189,17 @@ namespace Intel.RealSense
             {
                 object error;
                 return NativeMethods.rs2_get_frame_timestamp(Handle, out error);
+            }
+        }
+
+        /// <summary>Gets the sensor owning the frame</summary>
+        /// <value>the pointer to the sensor owning the frame</value>
+        public IntPtr Sensor
+        {
+            get
+            {
+                object error;
+                return NativeMethods.rs2_get_frame_sensor(Handle, out error);
             }
         }
 

@@ -9,6 +9,8 @@
 #include "proc/hole-filling-filter.h"
 #include "proc/zero-order.h"
 #include "ros_writer.h"
+#include "l500/l500-motion.h"
+#include "l500/l500-depth.h"
 
 namespace librealsense
 {
@@ -153,7 +155,7 @@ namespace librealsense
         }
         catch (std::exception const& e)
         {
-            LOG_WARNING("Failed to write frame metadata for " << stream_id << ". Exception: " << e.what());
+            LOG_WARNING("Failed to write frame metadata for " << stream_id.stream_type << ". Exception: " << e.what());
         }
 
         try
@@ -162,7 +164,7 @@ namespace librealsense
         }
         catch (std::exception const& e)
         {
-            LOG_WARNING("Failed to write stream extrinsics for " << stream_id << ". Exception: " << e.what());
+            LOG_WARNING("Failed to write stream extrinsics for " << stream_id.stream_type << ". Exception: " << e.what());
         }
     }
 
@@ -270,7 +272,7 @@ namespace librealsense
         std::string accel_topic = ros_topic::pose_accel_topic(stream_id);
         std::string twist_topic = ros_topic::pose_twist_topic(stream_id);
 
-        //Write the the pose frame as 3 seperate messages (each with different topic)
+        //Write the the pose frame as 3 separate messages (each with different topic)
         write_message(transform_topic, timestamp, transform);
         write_message(accel_topic, timestamp, accel);
         write_message(twist_topic, timestamp, twist);
@@ -291,8 +293,14 @@ namespace librealsense
         //Write frame's timestamp as metadata
         diagnostic_msgs::KeyValue frame_timestamp_msg;
         frame_timestamp_msg.key = FRAME_TIMESTAMP_MD_STR;
-        frame_timestamp_msg.value = to_string() << std::hexfloat << pose->get_frame_timestamp();
+        frame_timestamp_msg.value = to_string() << std::hexfloat << std::fixed << pose->get_frame_timestamp();
         write_message(md_topic, timestamp, frame_timestamp_msg);
+
+        //Write frame's number as external param
+        diagnostic_msgs::KeyValue frame_num_msg;
+        frame_num_msg.key = FRAME_NUMBER_MD_STR;
+        frame_num_msg.value = to_string() << pose->get_frame_number();
+        write_message(md_topic, timestamp, frame_num_msg);
 
         // Write the rest of the frame metadata and stream extrinsics
         write_additional_frame_messages(stream_id, timestamp, frame);
@@ -400,6 +408,13 @@ namespace librealsense
             write_sensor_options({ device_id, sensor_id }, timestamp, options);
             break;
         }
+
+        case RS2_EXTENSION_L500_DEPTH_SENSOR:
+        {
+            auto l500_depth_sensor_data = SnapshotAs<RS2_EXTENSION_L500_DEPTH_SENSOR>(snapshot);
+            write_l500_data({ device_id, sensor_id }, timestamp, l500_depth_sensor_data);
+            break;
+        }
         case RS2_EXTENSION_VIDEO:
         case RS2_EXTENSION_ROI:
         case RS2_EXTENSION_DEPTH_SENSOR:
@@ -488,6 +503,30 @@ namespace librealsense
                 LOG_WARNING("Failed to get or write option " << option_id << " for sensor " << sensor_id.sensor_index << ". Exception: " << e.what());
             }
         }
+    }
+
+    void ros_writer::write_l500_data(device_serializer::sensor_identifier sensor_id, const nanoseconds & timestamp, std::shared_ptr<l500_depth_sensor_interface> l500_depth_sensor)
+    {
+        auto intrinsics = l500_depth_sensor->get_intrinsic();
+
+        std_msgs::Float32MultiArray intrinsics_data;
+        intrinsics_data.data.push_back(intrinsics.resolution.num_of_resolutions);
+        for (auto i = 0; i < intrinsics.resolution.num_of_resolutions; i++)
+        {
+            auto intrins = intrinsics.resolution.intrinsic_resolution[i];
+            intrinsics_data.data.push_back(intrins.raw.pinhole_cam_model.width);
+            intrinsics_data.data.push_back(intrins.raw.pinhole_cam_model.height);
+            intrinsics_data.data.push_back(intrins.raw.zo.x);
+            intrinsics_data.data.push_back(intrins.raw.zo.y);
+
+            intrinsics_data.data.push_back(intrins.world.pinhole_cam_model.width);
+            intrinsics_data.data.push_back(intrins.world.pinhole_cam_model.height);
+            intrinsics_data.data.push_back(intrins.world.zo.x);
+            intrinsics_data.data.push_back(intrins.world.zo.y);
+        }
+
+        intrinsics_data.data.push_back(l500_depth_sensor->read_baseline());
+        write_message(ros_topic::l500_data_blocks_topic(sensor_id), timestamp, intrinsics_data);
     }
 
     rs2_extension ros_writer::get_processing_block_extension(const std::shared_ptr<processing_block_interface> block)

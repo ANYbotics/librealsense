@@ -68,8 +68,9 @@ public:
     }
 
 private:
-    rs2_stream _align_from;
     rs2::align _align;
+    rs2_stream _align_from;
+
 };
 
 class pointcloud_record_block : public processing_recordable_block
@@ -213,7 +214,7 @@ std::vector<rs2::frameset> get_composite_frames(std::vector<rs2::sensor> sensors
             frame_processor.invoke(f);
         });
     }
-    
+
     while (composite_frames.size() < sensors.size())
     {
         rs2::frameset composite_fs;
@@ -245,7 +246,7 @@ std::vector<rs2::frame> get_frames(std::vector<rs2::sensor> sensors)
             frames.push_back(f);
         });
     }
-    
+
     while (frames.size() < sensors.size())
     {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -346,7 +347,7 @@ void validate_ppf_results(const rs2::frame& result_frame, const rs2::frame& refe
     REQUIRE(result_profile.width() == reference_profile.width());
     REQUIRE(result_profile.height() == reference_profile.height());
 
-    auto pixels_as_bytes = reference_frame.as<rs2::video_frame>().get_bytes_per_pixel() * result_profile.width() * result_profile.height();
+    size_t pixels_as_bytes = reference_frame.as<rs2::video_frame>().get_bytes_per_pixel() * result_profile.width() * result_profile.height();
 
     // Pixel-by-pixel comparison of the resulted filtered depth vs data ercorded with external tool
     auto v1 = reinterpret_cast<const uint8_t*>(result_frame.get_data());

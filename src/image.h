@@ -9,12 +9,12 @@
 
 namespace librealsense
 {
-    void unpack_yuy2_y8(byte * const d[], const byte * s, int w, int h);
-    void unpack_yuy2_y16(byte * const d[], const byte * s, int w, int h);
-    void unpack_yuy2_rgb8(byte * const d[], const byte * s, int w, int h);
-    void unpack_yuy2_rgba8(byte * const d[], const byte * s, int w, int h);
-    void unpack_yuy2_bgr8(byte * const d[], const byte * s, int w, int h);
-    void unpack_yuy2_bgra8(byte * const d[], const byte * s, int w, int h);
+    void unpack_yuy2_y8(byte * const d[], const byte * s, int w, int h, int actual_size);
+    void unpack_yuy2_y16(byte * const d[], const byte * s, int w, int h, int actual_size);
+    void unpack_yuy2_rgb8(byte * const d[], const byte * s, int w, int h, int actual_size);
+    void unpack_yuy2_rgba8(byte * const d[], const byte * s, int w, int h, int actual_size);
+    void unpack_yuy2_bgr8(byte * const d[], const byte * s, int w, int h, int actual_size);
+    void unpack_yuy2_bgra8(byte * const d[], const byte * s, int w, int h, int actual_size);
 
     size_t           get_image_size                 (int width, int height, rs2_format format);
     int              get_image_bpp                  (rs2_format format);
@@ -52,6 +52,7 @@ namespace librealsense
     extern const native_pixel_format pf_sr300_invi; // 16-bit IR image
     extern const native_pixel_format pf_sr300_inzi; // Planar 16-bit IR image followed by 16-bit Z image
     extern const native_pixel_format pf_uyvyl;      // U Y0 V Y1 ordered chroma subsampled macropixel for Infrared stream
+    extern const native_pixel_format pf_uyvyc;      // U Y0 V Y1 ordered chroma subsampled macropixel for Color stream
     extern const native_pixel_format pf_accel_axes;   // Parse accel HID raw data to 3 axes
     extern const native_pixel_format pf_gyro_axes;   // Parse gyro HID raw data to 3 axes
     extern const native_pixel_format pf_rgb888;
@@ -59,6 +60,7 @@ namespace librealsense
     extern const native_pixel_format pf_confidence_l500;
     extern const native_pixel_format pf_z16_l500;
     extern const native_pixel_format pf_y8_l500;
+    extern const native_pixel_format pf_mjpg;
 }
 
 #endif

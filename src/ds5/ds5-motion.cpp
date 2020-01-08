@@ -164,17 +164,38 @@ namespace librealsense
 
         static const char* custom_sensor_fw_ver = "5.6.0.0";
 
+        std::unique_ptr<frame_timestamp_reader> iio_hid_ts_reader(new iio_hid_timestamp_reader());
+        std::unique_ptr<frame_timestamp_reader> custom_hid_ts_reader(new ds5_custom_hid_timestamp_reader());
+        auto enable_global_time_option = std::shared_ptr<global_time_option>(new global_time_option());
+
+        // Dynamically populate the supported HID profiles according to the selected IMU module
+        std::vector<odr> accel_fps_rates;
+        std::map<unsigned, unsigned> fps_and_frequency_map;
+        if (ds::d400_caps::CAP_BMI_085 && _device_capabilities)
+            accel_fps_rates = { odr::IMU_FPS_100,odr::IMU_FPS_200 };
+        else // Applies to BMI_055 and unrecognized sensors
+            accel_fps_rates = { odr::IMU_FPS_63,odr::IMU_FPS_250 };
+
+        for (auto&& elem : accel_fps_rates)
+        {
+            sensor_name_and_hid_profiles.push_back({ accel_sensor_name, { RS2_STREAM_ACCEL, 0, 1, 1, static_cast<uint16_t>(elem), RS2_FORMAT_MOTION_XYZ32F } });
+            fps_and_frequency_map.emplace(unsigned(elem), hid_fps_translation.at(elem));
+        }
+        fps_and_sampling_frequency_per_rs2_stream[RS2_STREAM_ACCEL] = fps_and_frequency_map;
+
         auto hid_ep = std::make_shared<ds5_hid_sensor>(this, ctx->get_backend().create_hid_device(all_hid_infos.front()),
-                                                        std::unique_ptr<frame_timestamp_reader>(new iio_hid_timestamp_reader()),
-                                                        std::unique_ptr<frame_timestamp_reader>(new ds5_custom_hid_timestamp_reader()),
+                                                        std::unique_ptr<frame_timestamp_reader>(new global_timestamp_reader(std::move(iio_hid_ts_reader), _tf_keeper, enable_global_time_option)),
+                                                        std::unique_ptr<frame_timestamp_reader>(new global_timestamp_reader(std::move(custom_hid_ts_reader), _tf_keeper, enable_global_time_option)),
                                                         fps_and_sampling_frequency_per_rs2_stream,
                                                         sensor_name_and_hid_profiles);
+
+        hid_ep->register_option(RS2_OPTION_GLOBAL_TIME_ENABLED, enable_global_time_option);
         hid_ep->register_pixel_format(pf_accel_axes);
         hid_ep->register_pixel_format(pf_gyro_axes);
 
         uint16_t pid = static_cast<uint16_t>(strtoul(all_hid_infos.front().pid.data(), nullptr, 16));
 
-        if ((camera_fw_version >= firmware_version(custom_sensor_fw_ver)) && (!val_in_range(pid, { ds::RS400_IMU_PID, ds::RS435I_PID, ds::RS430I_PID })))
+        if ((camera_fw_version >= firmware_version(custom_sensor_fw_ver)) && (!val_in_range(pid, { ds::RS400_IMU_PID, ds::RS435I_PID, ds::RS430I_PID, ds::RS465_PID })))
         {
             hid_ep->register_option(RS2_OPTION_MOTION_MODULE_TEMPERATURE,
                                     std::make_shared<motion_module_temperature_option>(*hid_ep));
@@ -242,57 +263,21 @@ namespace librealsense
     {
         using namespace ds;
 
-        _mm_calib = std::make_shared<mm_calib_handler>(_hw_monitor);
+        _mm_calib = std::make_shared<mm_calib_handler>(_hw_monitor,_device_capabilities);
 
         _accel_intrinsic = [this]() { return _mm_calib->get_intrinsic(RS2_STREAM_ACCEL); };
         _gyro_intrinsic = [this]() { return _mm_calib->get_intrinsic(RS2_STREAM_GYRO); };
-
-        std::string motion_module_fw_version = "";
-        if (_fw_version >= firmware_version("5.5.8.0"))
-        {
-            motion_module_fw_version = _hw_monitor->get_firmware_version_string(GVD, motion_module_fw_version_offset);
-        }
 
         initialize_fisheye_sensor(ctx,group);
 
         // D435i to use predefined values extrinsics
         _depth_to_imu = std::make_shared<lazy<rs2_extrinsics>>([this]()
         {
-            try
-            {
-                pose ex{};
-                auto extr = _mm_calib->get_extrinsic(RS2_STREAM_ACCEL);
-                ex = { { extr.rotation[0], extr.rotation[1], extr.rotation[2],
-                         extr.rotation[3], extr.rotation[4], extr.rotation[5],
-                         extr.rotation[6], extr.rotation[7], extr.rotation[8]},
-                       { extr.translation[0], extr.translation[1], extr.translation[2]} };
-                return from_pose(ex);
-            }
-            catch (const std::exception &exc)
-            {
-                LOG_INFO("IMU EEPROM extrinsic is not available" << exc.what());
-                throw;
-            }
-        });
-
-        _depth_to_imu_aligned = std::make_shared<lazy<rs2_extrinsics>>([this]()
-        {
-            try
-            {
-                rs2_extrinsics extr = **_depth_to_imu;
-                float rot[9] = { 1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f };
-                librealsense::copy(&extr.rotation, &rot, arr_size_bytes(rot));
-                return extr;
-            }
-            catch (const std::exception &exc)
-            {
-                LOG_INFO("IMU EEPROM Aligned extrinsic is not available" << exc.what());
-                throw;
-            }
+            return _mm_calib->get_extrinsic(RS2_STREAM_ACCEL);
         });
 
         // Make sure all MM streams are positioned with the same extrinsics
-        environment::get_instance().get_extrinsics_graph().register_extrinsics(*_depth_stream, *_accel_stream, _depth_to_imu_aligned);
+        environment::get_instance().get_extrinsics_graph().register_extrinsics(*_depth_stream, *_accel_stream, _depth_to_imu);
         environment::get_instance().get_extrinsics_graph().register_same_extrinsics(*_accel_stream, *_gyro_stream);
         register_stream_to_extrinsic_group(*_gyro_stream, 0);
         register_stream_to_extrinsic_group(*_accel_stream, 0);
@@ -301,29 +286,27 @@ namespace librealsense
         auto hid_ep = create_hid_device(ctx, group.hid_devices, _fw_version);
         if (hid_ep)
         {
-            _motion_module_device_idx = add_sensor(hid_ep);
+            _motion_module_device_idx = static_cast<uint8_t>(add_sensor(hid_ep));
 
             std::function<void(rs2_stream stream, frame_interface* fr, callback_invocation_holder callback)> align_imu_axes  = nullptr;
 
             // Perform basic IMU transformation to align orientation with Depth sensor CS.
-            float3x3 rotation{ {1,0,0}, {0,1,0}, {0,0,1} };
             try
             {
-                librealsense::copy(&rotation, &(*_depth_to_imu)->rotation, sizeof(float3x3));
-                align_imu_axes = [rotation](rs2_stream stream, frame_interface* fr, callback_invocation_holder callback)
+                float3x3 imu_to_depth = _mm_calib->imu_to_depth_alignment();
+                align_imu_axes = [imu_to_depth](rs2_stream stream, frame_interface* fr, callback_invocation_holder callback)
                 {
                     if (fr->get_stream()->get_format() == RS2_FORMAT_MOTION_XYZ32F)
                     {
                         auto xyz = (float3*)(fr->get_frame_data());
 
                         // The IMU sensor orientation shall be aligned with depth sensor's coordinate system
-                        //Reference spec : Bosch BMI055
-                        *xyz = rotation * (*xyz);
+                        *xyz = imu_to_depth * (*xyz);
                     }
                 };
             }
             catch (const std::exception& ex){
-                LOG_INFO("Motion Module extrinsic calibration  is not available, report: " << ex.what());
+                LOG_INFO("Motion Module - no extrinsic calibration, " << ex.what());
             }
 
             try
@@ -338,14 +321,14 @@ namespace librealsense
             }
             catch (const std::exception& ex)
             {
-                LOG_INFO("Motion Module intrinsic calibration is not available, report: " << ex.what());
+                LOG_INFO("Motion Module - no intrinsic calibration, " << ex.what());
 
                 // transform IMU axes if supported
                 hid_ep->register_on_before_frame_callback(align_imu_axes);
             }
 
-            if (!motion_module_fw_version.empty())
-                register_info(RS2_CAMERA_INFO_FIRMWARE_VERSION, motion_module_fw_version);
+            // HID metadata attributes
+            hid_ep->register_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP, make_hid_header_parser(&platform::hid_header::timestamp));
         }
     }
 
@@ -377,9 +360,12 @@ namespace librealsense
 
         std::unique_ptr<frame_timestamp_reader> ds5_timestamp_reader_backup(new ds5_timestamp_reader(environment::get_instance().get_time_service()));
         auto&& backend = ctx->get_backend();
+        std::unique_ptr<frame_timestamp_reader> ds5_timestamp_reader_metadata(new ds5_timestamp_reader_from_metadata(std::move(ds5_timestamp_reader_backup)));
+        auto enable_global_time_option = std::shared_ptr<global_time_option>(new global_time_option());
         auto fisheye_ep = std::make_shared<ds5_fisheye_sensor>(this, backend.create_uvc_device(fisheye_infos.front()),
-                                                    std::unique_ptr<frame_timestamp_reader>(new ds5_timestamp_reader_from_metadata(std::move(ds5_timestamp_reader_backup))));
+                                std::unique_ptr<frame_timestamp_reader>(new global_timestamp_reader(std::move(ds5_timestamp_reader_metadata), _tf_keeper, enable_global_time_option)));
 
+        fisheye_ep->register_option(RS2_OPTION_GLOBAL_TIME_ENABLED, enable_global_time_option);
         fisheye_ep->register_xu(fisheye_xu); // make sure the XU is initialized everytime we power the camera
         fisheye_ep->register_pixel_format(pf_raw8);
         fisheye_ep->register_pixel_format(pf_fe_raw8_unpatched_kernel); // W/O for unpatched kernel
@@ -462,7 +448,8 @@ namespace librealsense
         //});
     }
 
-    mm_calib_handler::mm_calib_handler(std::shared_ptr<hw_monitor> hw_monitor) :  _hw_monitor(hw_monitor)
+    mm_calib_handler::mm_calib_handler(std::shared_ptr<hw_monitor> hw_monitor, ds::d400_caps dev_cap) :
+        _hw_monitor(hw_monitor), _dev_cap(dev_cap)
     {
         _imu_eeprom_raw = [this]() { return get_imu_eeprom_raw(); };
 
@@ -487,8 +474,8 @@ namespace librealsense
             switch (calib_id)
             {
                 case ds::dm_v2_eeprom_id: // DM V2 id
-                    prs = std::make_shared<dm_v2_imu_calib_parser>(raw,valid); break;
-                case ds::tm1_eeprom_id:// TM1 id
+                    prs = std::make_shared<dm_v2_imu_calib_parser>(raw, _dev_cap, valid); break;
+                case ds::tm1_eeprom_id: // TM1 id
                     prs = std::make_shared<tm1_imu_calib_parser>(raw); break;
                 default:
                     throw recoverable_exception(to_string() << "Motion Intrinsics unresolved - "

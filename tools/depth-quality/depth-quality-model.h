@@ -6,6 +6,7 @@
 
 #include "depth-metrics.h"
 #include "model-views.h"
+#include "viewer.h"
 #include "ux-window.h"
 #include "os.h"
 
@@ -84,13 +85,20 @@ namespace rs2
                     {
                         std::string filename = _filename_base + "_configuration.json";
                         std::ofstream out(filename);
-                        out << adv.serialize_json();
-                        out.close();
+                        try
+                        {
+                            out << adv.serialize_json();
+                        }
+                        catch (...)
+                        {
+                            _viewer_model.not_model.add_notification(notification_data{ to_string() << "Metrics Recording: JSON Serializaion has failed",
+                                RS2_LOG_SEVERITY_WARN, RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
+                        }
                     }
                 }
                 _samples.clear();
-                _viewer_model.not_model.add_notification({ to_string() << "Finished to record frames and matrics data " ,
-                    0, RS2_LOG_SEVERITY_INFO, RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
+                _viewer_model.not_model.add_notification(notification_data{ to_string() << "Finished to record frames and matrics data " ,
+                    RS2_LOG_SEVERITY_INFO, RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
             }
 
             bool is_recording()

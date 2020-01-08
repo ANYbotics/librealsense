@@ -69,7 +69,21 @@ template<typename T> T rad2deg(T val) { return T(val * r2d); }
 
 namespace librealsense
 {
-    static const double TIMESTAMP_USEC_TO_MSEC = 0.001f;
+#pragma pack (push, 1)
+
+    struct hid_data
+    {
+        short x;
+        byte reserved1[2];
+        short y;
+        byte reserved2[2];
+        short z;
+        byte reserved3[2];
+    };
+
+#pragma pack(pop)
+
+    static const double TIMESTAMP_USEC_TO_MSEC = 0.001;
 
     ///////////////////////////////////
     // Utility types for general use //
@@ -81,29 +95,71 @@ namespace librealsense
         operator std::string() const { return ss.str(); }
     };
 
-    template<typename T, size_t size>
-    inline size_t copy_array(T(&dst)[size], const T(&src)[size])
+    template<typename T>
+    constexpr size_t arr_size(T const&) { return 1; }
+
+    template<typename T, size_t sz>
+    constexpr size_t arr_size(T(&arr)[sz])
     {
-        assert(dst != nullptr && src != nullptr);
-        for (size_t i = 0; i < size; i++)
-        {
-            dst[i] = src[i];
-        }
-        return size;
+        return sz * arr_size(arr[0]);
     }
 
-    template<typename T, size_t sizem, size_t sizen>
-    inline size_t copy_2darray(T(&dst)[sizem][sizen], const T(&src)[sizem][sizen])
+    template<typename T, size_t sz>
+    constexpr size_t arr_size_bytes(T(&arr)[sz])
     {
-        assert(dst != nullptr && src != nullptr);
-        for (size_t i = 0; i < sizem; i++)
+        return arr_size(arr) * sizeof(T);
+    }
+
+    template<typename T>
+    std::string array2str(T& data)
+    {
+        std::stringstream ss;
+        for (auto i = 0; i < arr_size(data); i++)
+            ss << " [" << i << "] = " << data[i] << "\t";
+        return ss.str();
+    }
+
+    // Auxillary function for compiler to highlight the invoking user code
+    template <typename T, typename S>
+    struct isNarrowing { static bool constexpr value = std::numeric_limits<S>::max() > std::numeric_limits<T>::max(); };
+
+    template<const bool force_narrowing=false, typename T, typename S, size_t size_tgt, size_t size_src>
+    inline size_t copy_array(T(&dst)[size_tgt], const S(&src)[size_src])
+    {
+        static_assert((size_tgt && (size_tgt == size_src)), "copy_array requires similar non-zero size for target and source containers");
+        static_assert((std::is_arithmetic<S>::value) && (std::is_arithmetic<T>::value), "copy_array supports arithmetic types only");
+        if (!force_narrowing && isNarrowing<T, S>::value)
         {
-            for (size_t j = 0; j < sizen; j++)
+            static_assert(!(isNarrowing<T, S>::value && !force_narrowing), "Passing narrowing conversion to copy_array requires setting the force flag on");
+        }
+
+        assert(dst != nullptr && src != nullptr);
+        for (size_t i = 0; i < size_tgt; i++)
+        {
+            dst[i] = static_cast<T>(src[i]);
+        }
+        return size_tgt;
+    }
+
+    template<const bool force_narrowing=false, typename T, typename S, size_t tgt_m, size_t tgt_n, size_t src_m, size_t src_n>
+    inline size_t copy_2darray(T(&dst)[tgt_m][tgt_n], const S(&src)[src_m][src_n])
+    {
+        static_assert((src_m && src_n && (tgt_n == src_n) && (tgt_m == src_m)), "copy_array requires similar non-zero size for target and source containers");
+        static_assert((std::is_arithmetic<S>::value) && (std::is_arithmetic<T>::value), "copy_2darray supports arithmetic types only");
+        if (isNarrowing<T, S>::value && !force_narrowing)
+        {
+            static_assert(!(isNarrowing<T, S>::value && !force_narrowing), "Passing narrowing conversion to copy_2darray requires setting the force flag on");
+        }
+
+        assert(dst != nullptr && src != nullptr);
+        for (size_t i = 0; i < src_m; i++)
+        {
+            for (size_t j = 0; j < src_n; j++)
             {
-                dst[i][j] = src[i][j];
+                dst[i][j] = static_cast<T>(src[i][j]);
             }
         }
-        return sizem * sizen;
+        return src_m * src_n;
     }
 
     // Comparing parameter against a range of values of the same type
@@ -191,6 +247,11 @@ namespace librealsense
 #endif
     }
 
+#ifdef BUILD_INTERNAL_UNIT_TESTS
+#define PRIVATE_TESTABLE public
+#else
+#define PRIVATE_TESTABLE private
+#endif
     //////////////////////////
     // Exceptions mechanism //
     //////////////////////////
@@ -391,6 +452,16 @@ namespace librealsense
             return *this;
         }
 
+        void reset() const
+        {
+            std::lock_guard<std::mutex> lock(_mtx);
+            if (_was_init)
+            {
+                _ptr.reset();
+                _was_init = false;
+            }
+        }
+
     private:
         T* operate() const
         {
@@ -422,27 +493,6 @@ namespace librealsense
         unique_id& operator=(const unique_id&) = delete;
     };
 
-    template<typename T, int sz>
-    int arr_size(T(&)[sz])
-    {
-        return sz;
-    }
-
-    template<typename T, int sz>
-    int arr_size_bytes(T(&)[sz])
-    {
-        return sz*sizeof(T);
-    }
-
-    template<typename T>
-    std::string array2str(T& data)
-    {
-        std::stringstream ss;
-        for (auto i = 0; i < arr_size(data); i++)
-            ss << " [" << i << "] = " << data[i] << "\t";
-        return ss.str();
-    }
-
     typedef float float_4[4];
 
     /////////////////////////////
@@ -450,7 +500,7 @@ namespace librealsense
     /////////////////////////////
 
 
-#define RS2_ENUM_HELPERS(TYPE, PREFIX) const char* get_string(TYPE value); \
+#define RS2_ENUM_HELPERS(TYPE, PREFIX) LRS_EXTENSION_API const char* get_string(TYPE value); \
         inline bool is_valid(TYPE value) { return value >= 0 && value < RS2_##PREFIX##_COUNT; } \
         inline std::ostream & operator << (std::ostream & out, TYPE value) { if(is_valid(value)) return out << get_string(value); else return out << (int)value; } \
         inline bool try_parse(const std::string& str, TYPE& res)       \
@@ -543,6 +593,26 @@ namespace librealsense
     }
     inline rs2_extrinsics inverse(const rs2_extrinsics& a) { auto p = to_pose(a); return from_pose(inverse(p)); }
 
+    inline std::ostream& operator <<(std::ostream& stream, const float3& elem)
+    {
+        return stream << elem.x << " " << elem.y << " " << elem.z;
+    }
+
+    inline std::ostream& operator <<(std::ostream& stream, const float4& elem)
+    {
+        return stream << elem.x << " " << elem.y << " " << elem.z << " " << elem.w;
+    }
+
+    inline std::ostream& operator <<(std::ostream& stream, const float3x3& elem)
+    {
+        return stream << elem.x << "\n" << elem.y << "\n" << elem.z;
+    }
+
+    inline std::ostream& operator <<(std::ostream& stream, const pose& elem)
+    {
+        return stream << "Position:\n " << elem.position  << "\n Orientation :\n" << elem.orientation;
+    }
+
     ///////////////////
     // Pixel formats //
     ///////////////////
@@ -604,7 +674,7 @@ namespace librealsense
     struct pixel_format_unpacker
     {
         bool requires_processing;
-        void(*unpack)(byte * const dest[], const byte * source, int width, int height);
+        void(*unpack)(byte * const dest[], const byte * source, int width, int height, int actual_size);
         std::vector<stream_output> outputs;
 
         platform::stream_profile get_uvc_profile(const stream_profile& request, uint32_t fourcc, const std::vector<platform::stream_profile>& uvc_profiles) const
@@ -943,11 +1013,35 @@ namespace librealsense
         void release() override { delete this; }
     };
 
+    class update_progress_callback : public rs2_update_progress_callback
+    {
+        rs2_update_progress_callback_ptr _nptr;
+        void* _client_data;
+    public:
+        update_progress_callback() {}
+        update_progress_callback(rs2_update_progress_callback_ptr on_update_progress, void* client_data = NULL)
+        : _nptr(on_update_progress), _client_data(client_data){}
+
+        operator bool() const { return _nptr != nullptr; }
+        void on_update_progress(const float progress) {
+            if (_nptr)
+            {
+                try { _nptr(progress, _client_data); }
+                catch (...)
+                {
+                    LOG_ERROR("Received an exception from firmware update progress callback!");
+                }
+            }
+        }
+        void release() { delete this; }
+    };
+
     typedef std::unique_ptr<rs2_log_callback, void(*)(rs2_log_callback*)> log_callback_ptr;
     typedef std::shared_ptr<rs2_frame_callback> frame_callback_ptr;
     typedef std::shared_ptr<rs2_frame_processor_callback> frame_processor_callback_ptr;
     typedef std::shared_ptr<rs2_notifications_callback> notifications_callback_ptr;
     typedef std::shared_ptr<rs2_devices_changed_callback> devices_changed_callback_ptr;
+    typedef std::shared_ptr<rs2_update_progress_callback> update_progress_callback_ptr;
 
     using internal_callback = std::function<void(rs2_device_list* removed, rs2_device_list* added)>;
     class devices_changed_callback_internal : public rs2_devices_changed_callback
@@ -1386,7 +1480,15 @@ namespace librealsense
         return std::find_if(data.begin(), data.end(), [](byte b){ return b!=0; }) != data.end();
     }
 
-    std::string datetime_string();
+    inline std::string datetime_string()
+    {
+        auto t = time(nullptr);
+        char buffer[20] = {};
+        const tm* time = localtime(&t);
+        if (nullptr != time)
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H_%M_%S", time);
+        return to_string() << buffer;
+    }
 
     bool file_exists(const char* filename);
 
@@ -1648,6 +1750,17 @@ namespace librealsense
         bool _valid;
         T _value;
     };
+
+}
+
+template<typename T>
+uint32_t rs_fourcc(const T a, const T b, const  T c, const T d)
+{
+    static_assert((std::is_integral<T>::value), "rs_fourcc supports integral built-in types only");
+    return ((static_cast<uint32_t>(a) << 24) |
+            (static_cast<uint32_t>(b) << 16) |
+            (static_cast<uint32_t>(c) << 8) |
+            (static_cast<uint32_t>(d) << 0));
 }
 
 namespace std {

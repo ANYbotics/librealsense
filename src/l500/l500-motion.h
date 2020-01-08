@@ -7,10 +7,11 @@
 #include <string>
 #include "device.h"
 #include "stream.h"
+#include "l500/l500-device.h"
 
 namespace librealsense
 {
-    class l500_motion : public virtual device
+    class l500_motion : public virtual l500_device
     {
     public:
         std::shared_ptr<hid_sensor> create_hid_device(std::shared_ptr<context> ctx,

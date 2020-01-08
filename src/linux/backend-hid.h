@@ -118,8 +118,8 @@ namespace librealsense
 
             void signal_stop();
 
-            int _stop_pipe_fd[2]; // write to _stop_pipe_fd[1] and read from _stop_pipe_fd[0]
             int _fd;
+            int _stop_pipe_fd[2]; // write to _stop_pipe_fd[1] and read from _stop_pipe_fd[0]
             std::map<std::string, std::string> _reports;
             std::string _custom_device_path;
             std::string _custom_sensor_name;
@@ -192,6 +192,8 @@ namespace librealsense
             v4l_hid_device(const hid_device_info& info);
 
             ~v4l_hid_device();
+
+            void register_profiles(const std::vector<hid_profile>& hid_profiles) override { _hid_profiles = hid_profiles;}
 
             void open(const std::vector<hid_profile>& hid_profiles);
 

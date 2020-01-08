@@ -8,52 +8,27 @@ project(RealsenseToolsDepthQuality)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+include_directories(${CMAKE_BINARY_DIR})
+
+include(../../common/CMakeLists.txt)
+
 if(BUILD_GRAPHICAL_EXAMPLES)
-
-if(APPLE)
-    add_definitions(-DNOC_FILE_DIALOG_OSX)
-elseif(UNIX)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-
-    include_directories(SYSTEM ${GTK3_INCLUDE_DIRS})
-    link_directories(${GTK3_LIBRARY_DIRS})
-    add_definitions(${GTK3_CFLAGS_OTHER})
-
-    add_definitions(-DNOC_FILE_DIALOG_GTK)
-elseif(WIN32)
-    add_definitions(-DNOC_FILE_DIALOG_WIN32)
-endif()
-
     set(RS_QUALITY_TOOL_CPP
-            ./rs-depth-quality.cpp
-            ./depth-quality-model.h
-            ./depth-quality-model.cpp
-            ./depth-metrics.h
-            ${LZ4_DIR}/lz4.h
-            ${LZ4_DIR}/lz4.c
-            ../../common/rendering.h
-            ../../common/ux-window.h
-            ../../common/ux-window.cpp
-            ../../common/model-views.h
-            ../../common/model-views.cpp
-            ../../third-party/imgui/imgui.cpp
-            ../../third-party/imgui/imgui_draw.cpp
-            ../../third-party/imgui/imgui_impl_glfw.cpp
-            ../../third-party/imgui/imgui-fonts-karla.hpp
-            ../../third-party/imgui/imgui-fonts-fontawesome.hpp
-            ../../common/ux-alignment.cpp
-            ../../common/ux-alignment.h
-            ../../third-party/glad/glad.c
-            ../../common/opengl3.cpp
-            ../../common/opengl3.h
-            ../../common/rs-config.h
-            ../../common/rs-config.cpp
-            ../../common/os.h
-            ../../common/os.cpp
+        ${COMMON_SRC}
+        rs-depth-quality.cpp
+        depth-quality-model.h
+        depth-quality-model.cpp
+        depth-metrics.h
+        ../../common/realsense-ui-advanced-mode.h
+        ../../third-party/imgui/imgui.cpp
+        ../../third-party/imgui/imgui_draw.cpp
+        ../../third-party/imgui/imgui_impl_glfw.cpp
+        ../../third-party/imgui/imgui-fonts-karla.hpp
+        ../../third-party/imgui/imgui-fonts-fontawesome.hpp
+        ../../third-party/glad/glad.c
+        ../../third-party/tinyfiledialogs/tinyfiledialogs.c
+        ../../third-party/tinyfiledialogs/tinyfiledialogs.h
         )
-
-     include_directories(SYSTEM ${LZ4_DIR})
 
     if(WIN32)
         add_executable(rs-depth-quality WIN32 ${RS_QUALITY_TOOL_CPP}
@@ -67,6 +42,8 @@ endif()
                 ${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-viewer.rc)
 
         source_group("3rd Party" FILES
+            ../../third-party/tinyfiledialogs/tinyfiledialogs.c
+            ../../third-party/tinyfiledialogs/tinyfiledialogs.h
             ../../third-party/imgui/imgui.cpp
             ../../third-party/imgui/imgui_draw.cpp
             ../../third-party/imgui/imgui_impl_glfw.cpp
@@ -74,15 +51,10 @@ endif()
             ../../third-party/imgui/imgui-fonts-fontawesome.hpp)
 
         source_group("Utils" FILES
-            ./depth-quality-model.h
-            ./depth-quality-model.cpp
-            ./depth-metrics.h
-            ../../common/rendering.h
-            ../../common/ux-window.h
-            ../../common/ux-window.cpp
-            ../../common/model-views.h
-            ../../common/model-views.cpp
-            ../../common/windows-app-bootstrap.cpp)
+            depth-quality-model.h
+            depth-quality-model.cpp
+            depth-metrics.h
+            ${COMMON_SRC})
 
         include_directories(rs-depth-quality ../../common  
                                             SYSTEM
@@ -90,6 +62,7 @@ endif()
                                              ../../third-party/imgui
                                              ../../third-party/glad
                                              ../../third-party/tclap/include
+                                             ../../third-party/tinyfiledialogs
                                              ${CMAKE_CURRENT_SOURCE_DIR}/res/)
 
     else()
@@ -100,12 +73,20 @@ endif()
                                              ../../third-party
                                              ../../third-party/imgui
                                              ../../third-party/glad
+                                             ../../third-party/tinyfiledialogs
                                              ../../third-party/tclap/include)
     endif()
 
     target_link_libraries(rs-depth-quality ${DEPENDENCIES}
                                            ${GTK3_LIBRARIES}
-                                           Threads::Threads)
+                                           Threads::Threads
+                                           realsense2-gl)
+
+    if (IMPORT_DEPTH_CAM_FW)
+        add_definitions(-DINTERNAL_FW)
+        target_link_libraries(rs-depth-quality uvc_fw)
+    endif()
+
     set_target_properties (rs-depth-quality PROPERTIES
         FOLDER Tools
     )

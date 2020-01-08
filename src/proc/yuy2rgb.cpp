@@ -14,7 +14,11 @@
 namespace librealsense
 {
     yuy2rgb::yuy2rgb()
-        : stream_filter_processing_block("yuy2rgb")
+        : yuy2rgb("YUY Converter")
+    {}
+
+    yuy2rgb::yuy2rgb(const char* name)
+        : stream_filter_processing_block(name)
     {
         _stream_filter.stream = RS2_STREAM_ANY;
         _stream_filter.format = RS2_FORMAT_YUYV;
@@ -38,7 +42,7 @@ namespace librealsense
         byte* planes[1];
         planes[0] = (byte*)ret.get_data();
 
-        unpack_yuy2_rgb8(planes, (const byte*)f.get_data(), vf.get_width(), vf.get_height());
+        unpack_yuy2_rgb8(planes, (const byte*)f.get_data(), vf.get_width(), vf.get_height(), vf.get_height() * vf.get_width() * _traget_bpp);
 
         return ret;
     }

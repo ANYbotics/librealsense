@@ -21,6 +21,7 @@
 #include "proc/colorizer.h"
 #include "proc/pointcloud.h"
 #include "proc/threshold.h"
+#include "proc/units-transform.h"
 #include "proc/disparity-transform.h"
 #include "proc/syncer-processing-block.h"
 #include "proc/decimation-filter.h"
@@ -36,6 +37,8 @@
 #include "environment.h"
 #include "proc/temporal-filter.h"
 #include "software-device.h"
+#include "fw-update/fw-update-device-interface.h"
+#include "global_timestamp_reader.h"
 
 ////////////////////////
 // API implementation //
@@ -56,15 +59,13 @@ struct rs2_processing_block_list
 struct rs2_sensor : public rs2_options
 {
     rs2_sensor(rs2_device parent,
-        librealsense::sensor_interface* sensor,
-        size_t index)
-        : rs2_options((librealsense::options_interface*)sensor),
-        parent(parent), sensor(sensor), index(index)
+        librealsense::sensor_interface* sensor) :
+        rs2_options((librealsense::options_interface*)sensor),
+        parent(parent), sensor(sensor)
     {}
 
     rs2_device parent;
     librealsense::sensor_interface* sensor;
-    size_t index;
 
     rs2_sensor& operator=(const rs2_sensor&) = delete;
     rs2_sensor(const rs2_sensor&) = delete;
@@ -120,10 +121,11 @@ struct rs2_error
     rs2_exception_type exception_type;
 };
 
-rs2_error * rs2_create_error(const char* what, const char* name, const char* args, rs2_exception_type type)
+rs2_error *rs2_create_error(const char* what, const char* name, const char* args, rs2_exception_type type) BEGIN_API_CALL
 {
     return new rs2_error{ what, name, args, type };
 }
+NOEXCEPT_RETURN(nullptr, what, name, args, type)
 
 void notifications_processor::raise_notification(const notification n)
 {
@@ -285,8 +287,7 @@ rs2_sensor* rs2_create_sensor(const rs2_sensor_list* list, int index, rs2_error*
 
     return new rs2_sensor{
             list->dev,
-            &list->dev.device->get_sensor(index),
-            (size_t)index
+            &list->dev.device->get_sensor(index)
     };
 }
 HANDLE_EXCEPTIONS_AND_RETURN(nullptr, list, index)
@@ -417,6 +418,27 @@ rs2_stream_profile* rs2_clone_stream_profile(const rs2_stream_profile* mode, rs2
     return new rs2_stream_profile{ sp.get(), sp };
 }
 HANDLE_EXCEPTIONS_AND_RETURN(nullptr, mode, stream, stream_idx, fmt)
+
+rs2_stream_profile* rs2_clone_video_stream_profile(const rs2_stream_profile* mode, rs2_stream stream, int index, rs2_format format, int width, int height, const rs2_intrinsics* intr, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(mode);
+    VALIDATE_ENUM(stream);
+    VALIDATE_ENUM(format);
+    VALIDATE_NOT_NULL(intr);
+
+    auto sp = mode->profile->clone();
+    sp->set_stream_type(stream);
+    sp->set_stream_index(index);
+    sp->set_format(format);
+
+    auto vid = std::dynamic_pointer_cast<video_stream_profile_interface>(sp);
+    auto i = *intr;
+    vid->set_intrinsics([i]() { return i; });
+    vid->set_dims(width, height);
+
+    return new rs2_stream_profile{ sp.get(), sp };
+}
+HANDLE_EXCEPTIONS_AND_RETURN(nullptr, mode, stream, index, format, width, height, intr)
 
 const rs2_raw_data_buffer* rs2_send_and_receive_raw_data(rs2_device* device, void* raw_data_to_send, unsigned size_of_raw_data_to_send, rs2_error** error) BEGIN_API_CALL
 {
@@ -582,6 +604,7 @@ HANDLE_EXCEPTIONS_AND_RETURN(nullptr, dev, info)
 int rs2_supports_device_info(const rs2_device* dev, rs2_camera_info info, rs2_error** error) BEGIN_API_CALL
 {
     VALIDATE_NOT_NULL(dev);
+    VALIDATE_NOT_NULL(dev->device);
     VALIDATE_ENUM(info);
     return dev->device->supports_info(info);
 }
@@ -763,6 +786,24 @@ rs2_timestamp_domain rs2_get_frame_timestamp_domain(const rs2_frame* frame_ref, 
     return ((frame_interface*)frame_ref)->get_frame_timestamp_domain();
 }
 HANDLE_EXCEPTIONS_AND_RETURN(RS2_TIMESTAMP_DOMAIN_COUNT, frame_ref)
+
+rs2_sensor* rs2_get_frame_sensor(const rs2_frame* frame, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(frame);
+    std::shared_ptr<librealsense::sensor_interface> sensor( ((frame_interface*)frame)->get_sensor() );
+    device_interface& dev = sensor->get_device();
+    auto dev_info = std::make_shared<librealsense::readonly_device_info>(dev.shared_from_this());
+    rs2_device dev2{ dev.get_context(), dev_info, dev.shared_from_this() };
+    return new rs2_sensor(dev2, sensor.get());
+}
+HANDLE_EXCEPTIONS_AND_RETURN(nullptr, frame)
+
+int rs2_get_frame_data_size(const rs2_frame* frame_ref, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(frame_ref);
+    return ((frame_interface*)frame_ref)->get_frame_data_size();
+}
+HANDLE_EXCEPTIONS_AND_RETURN(0, frame_ref)
 
 const void* rs2_get_frame_data(const rs2_frame* frame_ref, rs2_error** error) BEGIN_API_CALL
 {
@@ -1091,6 +1132,7 @@ int rs2_is_sensor_extendable_to(const rs2_sensor* sensor, rs2_extension extensio
     case RS2_EXTENSION_SOFTWARE_SENSOR     : return VALIDATE_INTERFACE_NO_THROW(sensor->sensor, librealsense::software_sensor)        != nullptr;
     case RS2_EXTENSION_POSE_SENSOR         : return VALIDATE_INTERFACE_NO_THROW(sensor->sensor, librealsense::pose_sensor_interface)  != nullptr;
     case RS2_EXTENSION_WHEEL_ODOMETER      : return VALIDATE_INTERFACE_NO_THROW(sensor->sensor, librealsense::wheel_odometry_interface)!= nullptr;
+    case RS2_EXTENSION_TM2_SENSOR          : return VALIDATE_INTERFACE_NO_THROW(sensor->sensor, librealsense::tm2_sensor_interface) != nullptr;
 
     default:
         return false;
@@ -1115,6 +1157,9 @@ int rs2_is_device_extendable_to(const rs2_device* dev, rs2_extension extension, 
         case RS2_EXTENSION_RECORD                : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::record_device)               != nullptr;
         case RS2_EXTENSION_PLAYBACK              : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::playback_device)             != nullptr;
         case RS2_EXTENSION_TM2                   : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::tm2_extensions)              != nullptr;
+        case RS2_EXTENSION_UPDATABLE             : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::updatable)                   != nullptr;
+        case RS2_EXTENSION_UPDATE_DEVICE         : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::update_device_interface)     != nullptr;
+        case RS2_EXTENSION_GLOBAL_TIMER          : return VALIDATE_INTERFACE_NO_THROW(dev->device, librealsense::global_time_interface)       != nullptr;
         default:
             return false;
     }
@@ -1182,7 +1227,8 @@ rs2_device* rs2_context_add_device(rs2_context* ctx, const char* file, rs2_error
     VALIDATE_NOT_NULL(ctx);
     VALIDATE_NOT_NULL(file);
 
-    return new rs2_device{ ctx->ctx, nullptr, ctx->ctx->add_device(file) };
+    auto dev_info = ctx->ctx->add_device(file);
+    return new rs2_device{ ctx->ctx, dev_info, dev_info->create_device(false) };
 }
 HANDLE_EXCEPTIONS_AND_RETURN(nullptr, ctx, file)
 
@@ -1848,6 +1894,12 @@ rs2_processing_block* rs2_create_threshold(rs2_error** error) BEGIN_API_CALL
 }
 NOARGS_HANDLE_EXCEPTIONS_AND_RETURN(nullptr)
 
+rs2_processing_block* rs2_create_units_transform(rs2_error** error) BEGIN_API_CALL
+{
+    return new rs2_processing_block { std::make_shared<units_transform>() };
+}
+NOARGS_HANDLE_EXCEPTIONS_AND_RETURN(nullptr)
+
 rs2_processing_block* rs2_create_align(rs2_stream align_to, rs2_error** error) BEGIN_API_CALL
 {
     VALIDATE_ENUM(align_to);
@@ -1954,6 +2006,8 @@ float rs2_depth_frame_get_distance(const rs2_frame* frame_ref, int x, int y, rs2
 {
     VALIDATE_NOT_NULL(frame_ref);
     auto df = VALIDATE_INTERFACE(((frame_interface*)frame_ref), librealsense::depth_frame);
+    VALIDATE_RANGE(x, 0, df->get_width() - 1);
+    VALIDATE_RANGE(y, 0, df->get_height() - 1);
     return df->get_distance(x, y);
 }
 HANDLE_EXCEPTIONS_AND_RETURN(0, frame_ref, x, y)
@@ -2024,8 +2078,7 @@ rs2_sensor* rs2_software_device_add_sensor(rs2_device* dev, const char* sensor_n
 
     return new rs2_sensor(
         *dev,
-        &df->add_software_sensor(sensor_name),
-        0);
+        &df->add_software_sensor(sensor_name));
 }
 HANDLE_EXCEPTIONS_AND_RETURN(nullptr, dev, sensor_name)
 
@@ -2173,6 +2226,63 @@ void rs2_disconnect_tm2_controller(const rs2_device* device, int id, rs2_error**
 }
 HANDLE_EXCEPTIONS_AND_RETURN(, device)
 
+void rs2_set_intrinsics(const rs2_sensor* sensor, const rs2_stream_profile* profile, const rs2_intrinsics* intrinsics, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(sensor);
+    VALIDATE_NOT_NULL(profile);
+    VALIDATE_NOT_NULL(intrinsics);
+
+    auto tm2 = VALIDATE_INTERFACE(sensor->sensor, librealsense::tm2_sensor_interface);
+    tm2->set_intrinsics(*profile->profile, *intrinsics);
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, sensor, profile, intrinsics)
+
+void rs2_set_extrinsics(const rs2_sensor* from_sensor, const rs2_stream_profile* from_profile, rs2_sensor* to_sensor, const rs2_stream_profile* to_profile, const rs2_extrinsics* extrinsics, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(from_sensor);
+    VALIDATE_NOT_NULL(from_profile);
+    VALIDATE_NOT_NULL(to_sensor);
+    VALIDATE_NOT_NULL(to_profile);
+    VALIDATE_NOT_NULL(extrinsics);
+    
+    if (from_sensor->parent.device != to_sensor->parent.device)
+    {
+        LOG_ERROR("Cannot set extrinsics of two different devices \n");
+        return;
+    }
+
+    auto tm2 = VALIDATE_INTERFACE(from_sensor->sensor, librealsense::tm2_sensor_interface);
+    tm2->set_extrinsics(*from_profile->profile, *to_profile->profile, *extrinsics);
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, from_sensor, from_profile, to_sensor, to_profile, extrinsics)
+
+void rs2_set_motion_device_intrinsics(const rs2_sensor* sensor, const rs2_stream_profile* profile, const rs2_motion_device_intrinsic* intrinsics, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(sensor);
+    VALIDATE_NOT_NULL(profile);
+    VALIDATE_NOT_NULL(intrinsics);
+
+    auto tm2 = VALIDATE_INTERFACE(sensor->sensor, librealsense::tm2_sensor_interface);
+    tm2->set_motion_device_intrinsics(*profile->profile, *intrinsics);
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, sensor, profile, intrinsics)
+
+void rs2_reset_to_factory_calibration(const rs2_device* device, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    auto tm2 = VALIDATE_INTERFACE(&device->device->get_sensor(0), librealsense::tm2_sensor_interface);
+    tm2->reset_to_factory_calibration();
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, device)
+
+void rs2_write_calibration(const rs2_device* device, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    auto tm2 = VALIDATE_INTERFACE(&device->device->get_sensor(0), librealsense::tm2_sensor_interface);
+    tm2->write_calibration();
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, device)
+
 rs2_processing_block_list* rs2_get_recommended_processing_blocks(rs2_sensor* sensor, rs2_error** error) BEGIN_API_CALL
 {
     VALIDATE_NOT_NULL(sensor);                            
@@ -2247,7 +2357,7 @@ const rs2_raw_data_buffer* rs2_export_localization_map(const rs2_sensor* sensor,
     std::vector<uint8_t> recv_buffer;
     if (pose_snr->export_relocalization_map(recv_buffer))
         return new rs2_raw_data_buffer{ recv_buffer };
-    return nullptr;
+    return (rs2_raw_data_buffer*)nullptr;
 }
 HANDLE_EXCEPTIONS_AND_RETURN(nullptr, sensor)
 
@@ -2315,3 +2425,140 @@ int rs2_send_wheel_odometry(const rs2_sensor* sensor, char wo_sensor_id, unsigne
     return wo_snr->send_wheel_odometry(wo_sensor_id, frame_num, { translational_velocity.x, translational_velocity.y, translational_velocity.z });
 }
 HANDLE_EXCEPTIONS_AND_RETURN(0, sensor, wo_sensor_id, frame_num, translational_velocity)
+
+void rs2_update_firmware_cpp(const rs2_device* device, const void* fw_image, int fw_image_size, rs2_update_progress_callback* callback, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    VALIDATE_NOT_NULL(fw_image);
+
+    if(fw_image_size <= 0)
+        throw std::runtime_error("invlid firmware image size provided to rs2_update_cpp");
+
+    auto fwu = VALIDATE_INTERFACE(device->device, librealsense::update_device_interface);
+
+    if (callback == NULL)
+        fwu->update(fw_image, fw_image_size, nullptr);
+    else
+        fwu->update(fw_image, fw_image_size, { callback, [](rs2_update_progress_callback* p) { p->release(); } });
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, device, fw_image)
+
+void rs2_update_firmware(const rs2_device* device, const void* fw_image, int fw_image_size, rs2_update_progress_callback_ptr callback, void* client_data, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    VALIDATE_NOT_NULL(fw_image);
+
+    if (fw_image_size <= 0)
+        throw std::runtime_error("invlid firmware image size provided to rs2_update");
+
+    auto fwu = VALIDATE_INTERFACE(device->device, librealsense::update_device_interface);
+
+    if(callback == NULL)
+        fwu->update(fw_image, fw_image_size, nullptr);
+    else
+    {
+        librealsense::update_progress_callback_ptr cb(new librealsense::update_progress_callback(callback, client_data),
+            [](update_progress_callback* p) { delete p; });
+        fwu->update(fw_image, fw_image_size, std::move(cb));
+    }
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, device, fw_image)
+
+const rs2_raw_data_buffer* rs2_create_flash_backup_cpp(const rs2_device* device, rs2_update_progress_callback* callback, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+
+    auto fwud = std::dynamic_pointer_cast<updatable>(device->device);
+    if (!fwud)
+        throw std::runtime_error("This device does not supports update protocol!");
+
+    std::vector<uint8_t> res;
+
+    if (callback == NULL)
+        res = fwud->backup_flash(nullptr);
+    else
+        res = fwud->backup_flash({ callback, [](rs2_update_progress_callback* p) { p->release(); } });
+
+    return new rs2_raw_data_buffer{ res };
+}
+HANDLE_EXCEPTIONS_AND_RETURN(nullptr, device)
+
+const rs2_raw_data_buffer* rs2_create_flash_backup(const rs2_device* device, rs2_update_progress_callback_ptr callback, void* client_data, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+
+    auto fwud = std::dynamic_pointer_cast<updatable>(device->device);
+    if (!fwud)
+        throw std::runtime_error("This device does not supports update protocol!");
+
+    std::vector<uint8_t> res;
+
+    if (callback == NULL)
+        res = fwud->backup_flash(nullptr);
+    else
+    {
+        librealsense::update_progress_callback_ptr cb(new librealsense::update_progress_callback(callback, client_data),
+            [](update_progress_callback* p) { delete p; });
+        res = fwud->backup_flash(std::move(cb));
+    }
+
+    return new rs2_raw_data_buffer{ res };
+}
+HANDLE_EXCEPTIONS_AND_RETURN(nullptr, device)
+
+void rs2_update_firmware_unsigned_cpp(const rs2_device* device, const void* image, int image_size, rs2_update_progress_callback* callback, int update_mode, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    VALIDATE_NOT_NULL(image);
+
+    if (image_size <= 0)
+        throw std::runtime_error("invlid firmware image size provided to rs2_update_firmware_unsigned_cpp");
+
+    auto fwud = std::dynamic_pointer_cast<updatable>(device->device);
+    if (!fwud)
+        throw std::runtime_error("This device does not supports update protocol!");
+
+    std::vector<uint8_t> buffer((uint8_t*)image, (uint8_t*)image + image_size);
+
+    if (callback == NULL)
+        fwud->update_flash(buffer, nullptr, update_mode);
+    else
+        fwud->update_flash(buffer, { callback, [](rs2_update_progress_callback* p) { p->release(); } }, update_mode);
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, image, device)
+
+void rs2_update_firmware_unsigned(const rs2_device* device, const void* image, int image_size, rs2_update_progress_callback_ptr callback, void* client_data, int update_mode,  rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+    VALIDATE_NOT_NULL(image);
+
+    if (image_size <= 0)
+        throw std::runtime_error("invlid firmware image size provided to rs2_update_firmware_unsigned");
+
+    auto fwud = std::dynamic_pointer_cast<updatable>(device->device);
+    if (!fwud)
+        throw std::runtime_error("This device does not supports update protocol!");
+
+    std::vector<uint8_t> buffer((uint8_t*)image, (uint8_t*)image + image_size);
+
+    if (callback == NULL)
+        fwud->update_flash(buffer, nullptr, update_mode);
+    else
+    {
+        librealsense::update_progress_callback_ptr cb(new librealsense::update_progress_callback(callback, client_data),
+            [](update_progress_callback* p) { delete p; });
+        fwud->update_flash(buffer, std::move(cb), update_mode);
+    }
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, image, device)
+
+void rs2_enter_update_state(const rs2_device* device, rs2_error** error) BEGIN_API_CALL
+{
+    VALIDATE_NOT_NULL(device);
+
+    auto fwud = std::dynamic_pointer_cast<updatable>(device->device);
+    if (!fwud)
+        throw std::runtime_error("this device does not supports fw update");
+    fwud->enter_update_state();
+}
+HANDLE_EXCEPTIONS_AND_RETURN(, device)

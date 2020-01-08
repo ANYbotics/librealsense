@@ -5,6 +5,7 @@
 
 #include "sensor.h"
 #include <mutex>
+#include "command_transfer.h"
 
 namespace librealsense
 {
@@ -195,7 +196,7 @@ namespace librealsense
     public:
         locked_transfer(std::shared_ptr<platform::command_transfer> command_transfer, uvc_sensor& uvc_ep)
             :_command_transfer(command_transfer),
-             _uvc_sensor_base(uvc_ep)
+            _uvc_sensor_base(uvc_ep)
         {}
 
         std::vector<uint8_t> send_receive(
@@ -203,6 +204,12 @@ namespace librealsense
             int timeout_ms = 5000,
             bool require_response = true)
         {
+            std::shared_ptr<int> token(_heap.allocate(), [&](int* ptr)
+            {
+                if (ptr) _heap.deallocate(ptr);
+            });
+            if (!token.get()) throw;
+
             std::lock_guard<std::recursive_mutex> lock(_local_mtx);
             return _uvc_sensor_base.invoke_powered([&]
                 (platform::uvc_device& dev)
@@ -212,10 +219,15 @@ namespace librealsense
                 });
         }
 
+        ~locked_transfer()
+        {
+            _heap.wait_until_empty();
+        }
     private:
         std::shared_ptr<platform::command_transfer> _command_transfer;
         uvc_sensor& _uvc_sensor_base;
         std::recursive_mutex _local_mtx;
+        small_heap<int, 256> _heap;
     };
 
     struct command
@@ -288,7 +300,7 @@ namespace librealsense
         struct hwmon_cmd_details
         {
             bool                                         oneDirection;
-            std::array<uint8_t, HW_MONITOR_COMMAND_SIZE> sendCommandData;
+            std::array<uint8_t, HW_MONITOR_BUFFER_SIZE>  sendCommandData;
             int                                          sizeOfSendCommandData;
             long                                         timeOut;
             std::array<uint8_t, 4>                       receivedOpcode;
@@ -310,8 +322,20 @@ namespace librealsense
         std::vector<uint8_t> send(std::vector<uint8_t> data) const;
         std::vector<uint8_t> send(command cmd) const;
         void get_gvd(size_t sz, unsigned char* gvd, uint8_t gvd_cmd) const;
-        std::string get_firmware_version_string(int gvd_cmd, uint32_t offset) const;
-        std::string get_module_serial_string(uint8_t gvd_cmd, uint32_t offset, int size = 6) const;
+        static std::string get_firmware_version_string(const std::vector<uint8_t>& buff, size_t index, size_t length = 4);
+        static std::string get_module_serial_string(const std::vector<uint8_t>& buff, size_t index, size_t length = 6);
         bool is_camera_locked(uint8_t gvd_cmd, uint32_t offset) const;
+
+        template <typename T>
+        T get_gvd_field(const std::vector<uint8_t>& data, size_t index)
+        {
+            T rv = 0;
+            if (index + sizeof(T) >= data.size())
+                throw new std::runtime_error("get_gvd_field - index out of bounds, buffer size: " +
+                    std::to_string(data.size()) + ", index: " + std::to_string(index));
+            for (int i = 0; i < sizeof(T); i++)
+                rv += data[index + i] << (i * 8);
+            return rv;
+        }
     };
 }
