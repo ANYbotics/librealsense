@@ -26,10 +26,16 @@ namespace librealsense
         l500_device(std::shared_ptr<context> ctx,
             const platform::backend_device_group& group);
 
-        std::shared_ptr<uvc_sensor> create_depth_device(std::shared_ptr<context> ctx,
+        std::shared_ptr<synthetic_sensor> create_depth_device(std::shared_ptr<context> ctx,
             const std::vector<platform::uvc_device_info>& all_device_infos);
 
-        uvc_sensor& get_depth_sensor() { return dynamic_cast<uvc_sensor&>(get_sensor(_depth_device_idx)); }
+        synthetic_sensor& get_depth_sensor() { return dynamic_cast<synthetic_sensor&>(get_sensor(_depth_device_idx)); }
+
+        uvc_sensor& get_raw_depth_sensor()
+        {
+            synthetic_sensor& depth_sensor = get_depth_sensor();
+            return dynamic_cast<uvc_sensor&>(*depth_sensor.get_raw_sensor());
+        }
 
         std::vector<uint8_t> send_receive_raw_data(const std::vector<uint8_t>& input) override
         {
@@ -65,18 +71,47 @@ namespace librealsense
 
         lazy<std::vector<uint8_t>> _calib_table_raw;
         firmware_version _fw_version;
-
         std::shared_ptr<stream_interface> _depth_stream;
         std::shared_ptr<stream_interface> _ir_stream;
         std::shared_ptr<stream_interface> _confidence_stream;
 
         void force_hardware_reset() const;
         bool _is_locked = true;
+
+        std::vector<rs2_option> _advanced_options;
     };
 
     class l500_notification_decoder : public notification_decoder
     {
     public:
         notification decode(int value) override;
+    };
+
+    class action_delayer
+    {
+    public:
+
+        void do_after_delay(std::function<void()> action, int milliseconds = 2000)
+        {
+            wait(milliseconds);
+            action();
+            _last_update = std::chrono::system_clock::now();
+        }
+
+    private:
+        void wait(int milliseconds)
+        {
+            auto now = std::chrono::system_clock::now();
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - _last_update).count();
+
+            while (diff < milliseconds)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                now = std::chrono::system_clock::now();
+                diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - _last_update).count();
+            }
+        }
+
+        std::chrono::system_clock::time_point _last_update;
     };
 }

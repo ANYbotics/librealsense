@@ -67,7 +67,7 @@ Your native app need to link with 'librealsense.so' in order to do that you will
 >        realsense2
 >        PROPERTIES
 >        IMPORTED_LOCATION
->        ${CMAKE_CURRENT_SOURCE_DIR}/build/jni/${ANDROID_ABI}/librealsense2.so
+>        ${CMAKE_CURRENT_SOURCE_DIR}/build/jni/${ANDROID_ABI}/any_librealsense2.so
 >    )
 >```
 

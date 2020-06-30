@@ -51,7 +51,7 @@
         ['OS=="mac"',
           {
             "libraries": [
-              '<(module_root_dir)/librealsense/build/Release/librealsense2.dylib',
+              '<(module_root_dir)/librealsense/build/Release/any_librealsense2.dylib',
               # Write the below RPATH into the generated addon
               '-Wl,-rpath,@loader_path/../../librealsense/build/Release',
             ],
@@ -67,7 +67,7 @@
           'OS=="linux"',
           {
             "libraries": [
-              "<(module_root_dir)/librealsense/build/librealsense2.so",
+              "<(module_root_dir)/librealsense/build/any_librealsense2.so",
             ],
             'ldflags': [
               '-Wl,-rpath,\$$ORIGIN/../../librealsense/build',

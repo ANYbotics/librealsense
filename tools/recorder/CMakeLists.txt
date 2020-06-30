@@ -19,6 +19,6 @@ install(
     rs-record
 
     RUNTIME DESTINATION
-    ${CMAKE_INSTALL_BINDIR}/any_librealsense2/
+    ${CMAKE_INSTALL_BINDIR}
 )
 

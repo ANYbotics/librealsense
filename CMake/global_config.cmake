@@ -53,6 +53,10 @@ macro(global_set_flags)
         add_definitions(-DRS2_USE_CUDA)
     endif()
 
+    if (BUILD_SHARED_LIBS)
+        add_definitions(-DBUILD_SHARED_LIBS)
+    endif()
+
     if (BUILD_INTERNAL_UNIT_TESTS)
         add_definitions(-DBUILD_INTERNAL_UNIT_TESTS)
     endif()
@@ -65,6 +69,16 @@ macro(global_set_flags)
         include(libusb_config)
     endif()
 
+    if(BUILD_NETWORK_DEVICE)
+        add_definitions(-DNET_DEVICE)
+        set(LRS_NET_TARGET realsense2-net)
+    endif()
+    
+    if(CHECK_FOR_UPDATES)
+        include(CMake/external_libcurl.cmake)
+        add_definitions(-DCHECK_FOR_UPDATES)
+    endif()
+    
     add_definitions(-D${BACKEND} -DUNICODE)
 endmacro()
 
@@ -86,15 +100,17 @@ macro(global_target_config)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<INSTALL_INTERFACE:include>
     )
+
+
+
 endmacro()
 
 macro(add_tm2)
     message(STATUS "Building with TM2")
-    add_subdirectory(third-party/libtm)
     include(libusb_config)
+    target_link_libraries(${LRS_TARGET} PRIVATE usb)
     if(USE_EXTERNAL_USB)
-        add_dependencies(tm libusb)
+        add_dependencies(${LRS_TARGET} libusb)
     endif()
-    target_compile_definitions(${LRS_TARGET} PRIVATE WITH_TRACKING=1 BUILD_STATIC=1)
-    target_link_libraries(${LRS_TARGET} PRIVATE tm ${CMAKE_THREAD_LIBS_INIT})
+    target_compile_definitions(${LRS_TARGET} PRIVATE WITH_TRACKING=1)
 endmacro()

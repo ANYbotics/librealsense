@@ -17,7 +17,7 @@ if(BUILD_WITH_TM2 AND NOT INTERNET_CONNECTION)
     set(BUILD_WITH_TM2 OFF)
 endif()
 
-# Checking Internet connection, as TM2 needs to download the FW from amazon cloud
+# Checking Internet connection, as DEPTH CAM needs to download the FW from amazon cloud
 if(IMPORT_DEPTH_CAM_FW AND NOT INTERNET_CONNECTION)
     message(WARNING "No internet connection, disabling IMPORT_DEPTH_CAM_FW")
     set(IMPORT_DEPTH_CAM_FW OFF)
@@ -103,6 +103,11 @@ if(BUILD_UNIT_TESTS)
     add_subdirectory(unit-tests)
 endif()
 
+if(BUILD_NETWORK_DEVICE)
+    add_subdirectory(src/ethernet)
+    add_subdirectory(src/compression)
+endif()
+
 if(BUILD_WITH_TM2)
     add_tm2()
 endif()
@@ -112,17 +117,3 @@ if(IMPORT_DEPTH_CAM_FW)
 endif()
 
 include(CMake/embedd_udev_rules.cmake)
-
-install(
-  DIRECTORY
-    include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  PATTERN ".svn" EXCLUDE
-)
-install(
-  TARGETS
-    ${LRS_TARGET}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)

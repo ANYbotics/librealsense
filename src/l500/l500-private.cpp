@@ -37,6 +37,7 @@ namespace librealsense
                     result = *it;
                     switch(info.pid)
                     {
+                    case L515_PID_PRE_PRQ:
                     case L515_PID:
                         if(result.mi == 7)
                         {
@@ -146,6 +147,53 @@ namespace librealsense
             rv.read_write_section.offset = rv.header.read_write_start_address;
 
             return rv;
+        }
+
+        freefall_option::freefall_option( hw_monitor & hwm, bool enabled )
+            : _hwm( hwm )
+            , _enabled( enabled )
+        {
+            // bool_option initializes with def=true, which is what we want
+            assert( is_true() );
+        }
+
+        void freefall_option::set( float value )
+        {
+            bool_option::set( value );
+
+            command cmd{ FALL_DETECT_ENABLE, is_true() };
+            auto res = _hwm.send( cmd );
+            _record_action( *this );
+        }
+
+        void freefall_option::enable( bool e )
+        {
+            if( e != is_enabled() )
+            {
+                if( !e  &&  is_true() )
+                    set( 0 );
+                _enabled = e;
+            }
+        }
+
+        hw_sync_option::hw_sync_option( hw_monitor& hwm, std::shared_ptr< freefall_option > freefall_opt )
+            : bool_option( false )
+            , _hwm( hwm )
+            , _freefall_opt( freefall_opt )
+        {
+        }
+
+        void hw_sync_option::set( float value )
+        {
+            bool_option::set( value );
+
+            // Disable the free-fall option if we're enabled!
+            if( _freefall_opt )
+                _freefall_opt->enable( ! is_true() );
+
+            command cmd{ HW_SYNC_EX_TRIGGER, is_true() };
+            auto res = _hwm.send( cmd );
+            _record_action( *this );
         }
     } // librealsense::ivcam2
 } // namespace librealsense

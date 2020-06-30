@@ -42,11 +42,12 @@ namespace rs2
         void draw_text(const char* msg, int x, int y, int h);
         virtual void set_color_scheme(float t) const;
         void unset_color_scheme() const;
-        virtual const int get_max_lifetime_ms() const;
+        virtual int get_max_lifetime_ms() const;
 
         virtual int calc_height();
         virtual void draw_pre_effect(int x, int y) {}
         virtual void draw_content(ux_window& win, int x, int y, float t, std::string& error_message);
+        virtual void draw_dismiss(ux_window& win, int x, int y);
         virtual void draw_expanded(ux_window& win, std::string& error_message) {}
 
         virtual void dismiss(bool snooze) { dismissed = true; snoozed = snooze; }
@@ -79,6 +80,12 @@ namespace rs2
         bool enable_dismiss = true;
         bool enable_expand = true;
         bool enable_click = false;
+        bool enable_complex_dismiss = false;
+
+        std::string delay_id = "";
+
+        bool is_delayed() const;
+        void delay(int days);
 
         float last_x, last_y;
         bool animating = false;
@@ -96,10 +103,12 @@ namespace rs2
     class process_manager : public std::enable_shared_from_this<process_manager>
     {
     public:
-        process_manager(std::string name, device_model& model)
-            : _process_name(name), _model(model) {}
+        process_manager(std::string name)
+            : _process_name(name) {}
 
-        void start(std::shared_ptr<notification_model> n);
+        virtual ~process_manager() = default;
+
+        void start(invoker invoke);
         int get_progress() const { return _progress; }
         bool done() const { return _done; }
         bool started() const { return _started; }
@@ -126,8 +135,17 @@ namespace rs2
         std::mutex _log_lock;
         std::string _last_error;
         std::string _process_name;
+    };
 
-        device_model& _model;
+    struct progress_bar
+    {
+        void draw(ux_window& win, int w, int progress);
+
+        float progress_speed = 5.f;
+        std::chrono::system_clock::time_point last_progress_time;
+        int last_progress = 0;
+        float curr_progress_value = 0.f;
+        float threshold_progress = 5.f;
     };
 
     struct process_notification_model : public notification_model
@@ -141,11 +159,7 @@ namespace rs2
 
         std::shared_ptr<process_manager> update_manager = nullptr;
         int update_state = 0;
-        float progress_speed = 5.f;
-        std::chrono::system_clock::time_point last_progress_time;
-        int last_progress = 0;
-        float curr_progress_value = 0.f;
-        float threshold_progress = 5.f;
+        progress_bar _progress_bar;
     };
 
     struct version_upgrade_model : public process_notification_model
@@ -155,11 +169,22 @@ namespace rs2
         void set_color_scheme(float t) const override;
         void draw_content(ux_window& win, int x, int y, float t, std::string& error_message) override;
         int calc_height() override;
-        const int get_max_lifetime_ms() const override { return 40000; }
+        int get_max_lifetime_ms() const override { return 40000; }
 
         int _version;
         bool _first = true;
     };
+
+    struct metadata_warning_model : public notification_model
+    {
+        metadata_warning_model();
+
+        void set_color_scheme(float t) const override;
+        void draw_content(ux_window& win, int x, int y, float t, std::string& error_message) override;
+        int calc_height() override { return 130; }
+        int get_max_lifetime_ms() const override { return 40000; }
+    };
+
 
     struct notifications_model
     {
@@ -185,7 +210,8 @@ namespace rs2
         std::recursive_mutex m;
         bool new_log = false;
 
-        std::vector<std::string> log;
+        single_consumer_queue<std::string> incoming_log_queue;
+        std::deque<std::string> notification_logs;
         std::shared_ptr<notification_model> selected;
         std::chrono::system_clock::time_point last_snoozed;
     };
@@ -199,4 +225,44 @@ namespace rs2
     {
         return{ v.x, v.y, v.z, a };
     }
+
+    class export_manager : public process_manager
+    {
+    public:
+        export_manager(const std::string& fname, std::unique_ptr<rs2::filter> exporter, frame data)
+            : process_manager("Export"), _fname(fname), _exporter(std::move(exporter)), _data(data) {}
+
+        std::string get_filename() const { return _fname; }
+        frame get_data() const { return _data; }
+
+
+    private:
+        void process_flow(std::function<void()> cleanup,
+            invoker invoke) override;
+
+        std::string _fname;
+        std::unique_ptr<rs2::filter> _exporter;
+        frame _data;
+    };
+
+    struct export_notification_model : public process_notification_model
+    {
+        enum states
+        {
+            STATE_INITIAL_PROMPT = 0,
+            STATE_IN_PROGRESS = 1,
+            STATE_COMPLETE = 2,
+            STATE_FAILED = 3,
+        };
+
+        export_manager& get_manager() {
+            return *std::dynamic_pointer_cast<export_manager>(update_manager);
+        }
+
+        export_notification_model(std::shared_ptr<export_manager> manager);
+
+        void set_color_scheme(float t) const override;
+        void draw_content(ux_window& win, int x, int y, float t, std::string& error_message) override;
+        int calc_height() override;
+    };
 }

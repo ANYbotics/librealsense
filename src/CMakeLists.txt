@@ -18,6 +18,11 @@ message(STATUS "using ${BACKEND}")
 if(UNIX OR (ANDROID_NDK_TOOLCHAIN_INCLUDED AND (${BACKEND} STREQUAL RS2_USE_V4L2_BACKEND)))
     include(${_rel_path}/libusb/CMakeLists.txt)
 endif()
+
+if(WIN32)
+    include(${_rel_path}/win/CMakeLists.txt)
+    include(${_rel_path}/winusb/CMakeLists.txt)
+endif()
     
 if(WIN32)
     include(${_rel_path}/win/CMakeLists.txt)
@@ -120,4 +125,6 @@ target_sources(${LRS_TARGET}
         "${CMAKE_CURRENT_LIST_DIR}/types.h"
         "${CMAKE_CURRENT_LIST_DIR}/command_transfer.h"
         "${CMAKE_CURRENT_LIST_DIR}/frame-validator.h"
+        "${CMAKE_CURRENT_LIST_DIR}/auto-calibrated-device.h"
+        "${CMAKE_CURRENT_LIST_DIR}/serializable-interface.h"
 )

@@ -15,13 +15,14 @@ namespace librealsense
 {
     const uint16_t L500_RECOVERY_PID    = 0x0b55;
     const uint16_t L500_PID             = 0x0b0d;
-    const uint16_t L515_PID             = 0x0b3d;
+    const uint16_t L515_PID_PRE_PRQ     = 0x0b3d;
+    const uint16_t L515_PID             = 0x0b64;
 
     namespace ivcam2
     {
         // L500 depth XU identifiers
         const uint8_t L500_HWMONITOR = 1;
-        const uint8_t L500_DEPTH_VISUAL_PRESET = 2;
+        const uint8_t L500_AMBIENT = 2;
         const uint8_t L500_ERROR_REPORTING = 3;
 
         const uint32_t FLASH_SIZE = 0x00200000;
@@ -48,13 +49,17 @@ namespace librealsense
             GLD                         = 0x0F, //"LoggerCoreGetDataParams"
             GVD                         = 0x10, //"Get Version and Date"
             DFU                         = 0x1E, //"Go to DFU"
+            HW_SYNC_EX_TRIGGER          = 0x19, // Enable (not default) HW sync; will disable freefall
             HW_RESET                    = 0x20, //"HW Reset"
+            AMCSET                      = 0x2B, // Set options (L515)
+            AMCGET                      = 0x2C, // Get options (L515)
             PFD                         = 0x3B, // Disable power features <Parameter1 Name="0 - Disable, 1 - Enable" />
             DPT_INTRINSICS_GET          = 0x5A,
             TEMPERATURES_GET            = 0x6A,
             DPT_INTRINSICS_FULL_GET     = 0x7F,
             RGB_INTRINSIC_GET           = 0x81,
-            RGB_EXTRINSIC_GET           = 0x82
+            RGB_EXTRINSIC_GET           = 0x82,
+            FALL_DETECT_ENABLE          = 0x9D, // Enable (by default) free-fall sensor shutoff (0=disable; 1=enable)
         };
 
         enum gvd_fields
@@ -74,6 +79,7 @@ namespace librealsense
         static const std::map<std::uint16_t, std::string> rs500_sku_names = {
             { L500_RECOVERY_PID,    "Intel RealSense L5xx Recovery"},
             { L500_PID,             "Intel RealSense L500"},
+            { L515_PID_PRE_PRQ,     "Intel RealSense L515 (pre-PRQ)"},
             { L515_PID,             "Intel RealSense L515"},
         };
 
@@ -212,7 +218,7 @@ namespace librealsense
         public:
             float query() const override;
 
-            option_range get_range() const override { return option_range{ 0, 100, 0, 0 }; };
+            option_range get_range() const override { return option_range{ 0, 100, 0, 0 }; }
 
             bool is_enabled() const override { return true; }
 
@@ -228,7 +234,7 @@ namespace librealsense
         class l500_timestamp_reader : public frame_timestamp_reader
         {
             static const int pins = 3;
-            mutable std::vector<int64_t> counter;
+            mutable std::vector<size_t> counter;
             std::shared_ptr<platform::time_service> _ts;
             mutable std::recursive_mutex _mtx;
         public:
@@ -241,31 +247,31 @@ namespace librealsense
             void reset() override
             {
                 std::lock_guard<std::recursive_mutex> lock(_mtx);
-                for (auto i = 0; i < pins; ++i)
+                for (size_t i = 0; i < pins; ++i)
                 {
                     counter[i] = 0;
                 }
             }
 
-            rs2_time_t get_frame_timestamp(const request_mapping& mode, const platform::frame_object& fo) override
+            rs2_time_t get_frame_timestamp(const std::shared_ptr<frame_interface>&) override
             {
                 std::lock_guard<std::recursive_mutex> lock(_mtx);
                 return _ts->get_time();
             }
 
-            unsigned long long get_frame_counter(const request_mapping & mode, const platform::frame_object& fo) const override
+            unsigned long long get_frame_counter(const std::shared_ptr<frame_interface>& frame) const override
             {
                 std::lock_guard<std::recursive_mutex> lock(_mtx);
-                auto pin_index = 0;
-                if (mode.pf->fourcc == 0x5a313620) // Z16
+                size_t pin_index = 0;
+                if (frame->get_stream()->get_format() == RS2_FORMAT_Z16)
                     pin_index = 1;
-                else if (mode.pf->fourcc == 0x43202020) // Confidence
+                else if (frame->get_stream()->get_stream_type() == RS2_STREAM_CONFIDENCE)
                     pin_index = 2;
 
                 return ++counter[pin_index];
             }
 
-            rs2_timestamp_domain get_frame_timestamp_domain(const request_mapping & mode, const platform::frame_object& fo) const override
+            rs2_timestamp_domain get_frame_timestamp_domain(const std::shared_ptr<frame_interface>&) const override
             {
                 return RS2_TIMESTAMP_DOMAIN_SYSTEM_TIME;
             }
@@ -280,21 +286,23 @@ namespace librealsense
 
         protected:
 
-            bool has_metadata_ts(const platform::frame_object& fo) const
+            bool has_metadata_ts(const std::shared_ptr<frame_interface>& frame) const
             {
                 // Metadata support for a specific stream is immutable
+                auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
                 const bool has_md_ts = [&] { std::lock_guard<std::recursive_mutex> lock(_mtx);
-                return ((fo.metadata != nullptr) && (fo.metadata_size >= platform::uvc_header_size) && ((byte*)fo.metadata)[0] >= platform::uvc_header_size);
+                return ((f->additional_data.metadata_size >= platform::uvc_header_size) && ((byte*)f->additional_data.metadata_blob.data())[0] >= platform::uvc_header_size);
                 }();
 
                 return has_md_ts;
             }
 
-            bool has_metadata_fc(const platform::frame_object& fo) const
+            bool has_metadata_fc(const std::shared_ptr<frame_interface>& frame) const
             {
                 // Metadata support for a specific stream is immutable
+                auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
                 const bool has_md_frame_counter = [&] { std::lock_guard<std::recursive_mutex> lock(_mtx);
-                return ((fo.metadata != nullptr) && (fo.metadata_size > platform::uvc_header_size) && ((byte*)fo.metadata)[0] > platform::uvc_header_size);
+                return ((f->additional_data.metadata_size > platform::uvc_header_size) && ((byte*)f->additional_data.metadata_blob.data())[0] > platform::uvc_header_size);
                 }();
 
                 return has_md_frame_counter;
@@ -307,14 +315,59 @@ namespace librealsense
                 reset();
             }
 
-            rs2_time_t get_frame_timestamp(const request_mapping& mode, const platform::frame_object& fo) override;
+            rs2_time_t get_frame_timestamp(const std::shared_ptr<frame_interface>& frame) override;
 
-            unsigned long long get_frame_counter(const request_mapping & mode, const platform::frame_object& fo) const override;
+            unsigned long long get_frame_counter(const std::shared_ptr<frame_interface>& frame) const override;
 
             void reset() override;
 
-            rs2_timestamp_domain get_frame_timestamp_domain(const request_mapping & mode, const platform::frame_object& fo) const override;
+            rs2_timestamp_domain get_frame_timestamp_domain(const std::shared_ptr<frame_interface>& frame) const override;
         };
+
+        /* For RS2_OPTION_FREEFALL_DETECTION_ENABLED */
+        class freefall_option : public bool_option
+        {
+        public:
+            freefall_option( hw_monitor & hwm, bool enabled = true );
+
+            bool is_enabled() const override { return _enabled; }
+            virtual void enable( bool = true );
+
+            virtual void set( float value ) override;
+            virtual const char * get_description() const override
+            {
+                return "When enabled (default), the sensor will turn off if a free-fall is detected";
+            }
+            virtual void enable_recording( std::function<void( const option& )> record_action ) override { _record_action = record_action; }
+
+        private:
+            std::function<void( const option& )> _record_action = []( const option& ) {};
+            hw_monitor & _hwm;
+            bool _enabled;
+        };
+
+        /*  For RS2_OPTION_INTER_CAM_SYNC_MODE
+            Not an advanced control: always off after camera startup (reset).
+            When enabled, the freefall control should turn off.
+        */
+        class hw_sync_option : public bool_option
+        {
+        public:
+            hw_sync_option( hw_monitor& hwm, std::shared_ptr< freefall_option > freefall_opt );
+
+            virtual void set( float value ) override;
+            virtual const char* get_description() const override
+            {
+                return "Enable multi-camera hardware synchronization mode (disabled on startup); not compatible with free-fall detection";
+            }
+            virtual void enable_recording( std::function<void( const option& )> record_action ) override { _record_action = record_action; }
+
+        private:
+            std::function<void( const option& )> _record_action = []( const option& ) {};
+            hw_monitor& _hwm;
+            std::shared_ptr< freefall_option > _freefall_opt;
+        };
+
 
     } // librealsense::ivcam2
 } // namespace librealsense

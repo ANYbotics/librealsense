@@ -40,7 +40,7 @@ LINUX_BRANCH=$(uname -r)
 #Get kernel major.minor
 IFS='.' read -a kernel_version <<< ${LINUX_BRANCH}
 k_maj_min=$((${kernel_version[0]}*100 + ${kernel_version[1]}))
-if [ ${k_maj_min} -ne 404 ]; then
+if [[ ( ${xhci_patch} -eq 1 ) && ( ${k_maj_min} -ne 404 ) ]]; then
 	echo -e "\e[43mThe xhci_patch flag is compatible with LTS branch 4.4 only, currently selected kernel is $(uname -r)\e[0m"
 	exit 1
 fi
@@ -83,8 +83,8 @@ cd ${kernel_name}
 #then
 #Search the repository for the tag that matches the mmaj.min.patch-build of Ubuntu kernel
 kernel_full_num=$(echo $LINUX_BRANCH | cut -d '-' -f 1,2)
-kernel_git_tag=$(git ls-remote --tags origin | grep ${kernel_full_num} | grep '[^^{}]$' | awk -F/ '{print $NF}')
-echo -e "\e[32mDownload Ubuntu LTS tag \e[47m${kernel_git_tag}\e[32m \e[0m"
+kernel_git_tag=$(git ls-remote --tags origin | grep ${kernel_full_num} | grep '[^^{}]$' | tail -n 1 | awk -F/ '{print $NF}')
+echo -e "\e[32mFetching Ubuntu LTS tag \e[47m${kernel_git_tag}\e[0m \e[32m to the local kernel sources folder\e[0m"
 git fetch origin tag ${kernel_git_tag} --no-tags
 
 # Verify that there are no trailing changes., warn the user to make corrective action if needed
@@ -108,7 +108,7 @@ then
 	fi
 fi
 
-echo -e "\e[Switching to LTS tag ${kernel_git_tag}\e[0m"
+echo -e "\e[32mSwitching to LTS tag ${kernel_git_tag}\e[0m"
 git checkout ${kernel_git_tag}
 
 
@@ -128,21 +128,26 @@ else
 	patch -p1 < ../scripts/realsense-powerlinefrequency-control-fix.patch
 	# Applying 3rd-party patch that affects USB2 behavior
 	# See reference https://patchwork.kernel.org/patch/9907707/
-	if [ ${k_maj_min} -lt 418 ]; then
-		echo -e "\e[32mRetrofit uvc bug fix enabled with 4.18+\e[0m"
-		patch -p1 < ../scripts/v1-media-uvcvideo-mark-buffer-error-where-overflow.patch
+	if [ ${k_maj_min} -lt 418 ];
+	then
+		echo -e "\e[32mRetrofit UVC bug fix rectified in 4.18+\e[0m"
+		if patch -N --dry-run -p1 < ../scripts/v1-media-uvcvideo-mark-buffer-error-where-overflow.patch; then
+			patch -N -p1 < ../scripts/v1-media-uvcvideo-mark-buffer-error-where-overflow.patch
+		else
+			echo -e "\e[36m  Skip the patch - it is already found in the source tree\e[0m"
+		fi
 	fi
 	if [ $xhci_patch -eq 1 ]; then
 		echo -e "\e[32mApplying streamoff hotfix patch in videobuf2-core\e[0m"
 		patch -p1 < ../scripts/01-Backport-streamoff-vb2-core-hotfix.patch
 		echo -e "\e[32mApplying 01-xhci-Add-helper-to-get-hardware-dequeue-pointer-for patch\e[0m"
-		patch -p1 < "../scripts/01-xhci-Add-helper-to-get-hardware-dequeue-pointer-for.patch"
+		patch -p1 < ../scripts/01-xhci-Add-helper-to-get-hardware-dequeue-pointer-for.patch
 		echo -e "\e[32mApplying 02-xhci-Add-stream-id-to-to-xhci_dequeue_state-structur patch\e[0m"
-		patch -p1 < "../scripts/02-xhci-Add-stream-id-to-to-xhci_dequeue_state-structur.patch"
+		patch -p1 < ../scripts/02-xhci-Add-stream-id-to-to-xhci_dequeue_state-structur.patch
 		echo -e "\e[32mApplying 03-xhci-Find-out-where-an-endpoint-or-stream-stopped-fr patch\e[0m"
-		patch -p1 < "../scripts/03-xhci-Find-out-where-an-endpoint-or-stream-stopped-fr.patch"
+		patch -p1 < ../scripts/03-xhci-Find-out-where-an-endpoint-or-stream-stopped-fr.patch
 		echo -e "\e[32mApplying 04-xhci-remove-unused-stopped_td-pointer patch\e[0m"
-		patch -p1 < "../scripts/04-xhci-remove-unused-stopped_td-pointer.patch"
+		patch -p1 < ../scripts/04-xhci-remove-unused-stopped_td-pointer.patch
 	fi
 fi
 
@@ -222,12 +227,15 @@ echo -e "\e[32mPatched kernels modules were created successfully\n\e[0m"
 # Load the newly-built modules
 # As a precausion start with unloading the core uvcvideo:
 try_unload_module uvcvideo
+try_unload_module videodev
+
+echo $build_usbcore_modules
+if [ $build_usbcore_modules -eq 1 ]; then
 try_unload_module videobuf2_v4l2
 try_unload_module videobuf2_core
 try_unload_module v4l2_common
-try_unload_module videodev
 
-if [ $build_usbcore_modules -eq 1 ]; then
+
 	#Replace usb subsystem modules
 	try_unload_module usbhid
 	try_unload_module xhci-pci

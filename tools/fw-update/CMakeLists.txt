@@ -11,4 +11,4 @@ target_link_libraries(${PROJECT_NAME} ${DEPENDENCIES})
 include_directories(../../third-party/tclap/include ${CMAKE_BINARY_DIR})
 set_target_properties (${PROJECT_NAME} PROPERTIES FOLDER Tools)
 
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/any_librealsense2/)
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

@@ -2,7 +2,7 @@
 ## Build
 For building the package, run:
 
-    catkin build librealsense2
+    catkin build any_librealsense2
 
 ## Patching of UVC kernel module
 Running RealSense Depth Cameras on Linux requires patching and inserting modified kernel drivers, specially when it comes to devices with the latest firmware versions (> v5.09.02).

@@ -67,6 +67,9 @@ void init_sensor(py::module &m) {
         .def("__nonzero__", &rs2::sensor::operator bool) // No docstring in C++
         .def(BIND_DOWNCAST(sensor, roi_sensor))
         .def(BIND_DOWNCAST(sensor, depth_sensor))
+        .def(BIND_DOWNCAST(sensor, color_sensor))
+        .def(BIND_DOWNCAST(sensor, motion_sensor))
+        .def(BIND_DOWNCAST(sensor, fisheye_sensor))
         .def(BIND_DOWNCAST(sensor, pose_sensor))
         .def(BIND_DOWNCAST(sensor, wheel_odometer));
 
@@ -85,6 +88,18 @@ void init_sensor(py::module &m) {
              "Retrieves mapping between the units of the depth image and meters.")
         .def("__nonzero__", &rs2::depth_sensor::operator bool); // No docstring in C++
 
+    py::class_<rs2::color_sensor, rs2::sensor> color_sensor(m, "color_sensor"); // No docstring in C++
+    color_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
+        .def("__nonzero__", &rs2::color_sensor::operator bool); // No docstring in C++
+
+    py::class_<rs2::motion_sensor, rs2::sensor> motion_sensor(m, "motion_sensor"); // No docstring in C++
+    motion_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
+        .def("__nonzero__", &rs2::motion_sensor::operator bool); // No docstring in C++
+
+    py::class_<rs2::fisheye_sensor, rs2::sensor> fisheye_sensor(m, "fisheye_sensor"); // No docstring in C++
+    fisheye_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
+        .def("__nonzero__", &rs2::fisheye_sensor::operator bool); // No docstring in C++
+
     // rs2::depth_stereo_sensor
     py::class_<rs2::depth_stereo_sensor, rs2::depth_sensor> depth_stereo_sensor(m, "depth_stereo_sensor"); // No docstring in C++
     depth_stereo_sensor.def(py::init<rs2::sensor>())
@@ -93,13 +108,35 @@ void init_sensor(py::module &m) {
     py::class_<rs2::pose_sensor, rs2::sensor> pose_sensor(m, "pose_sensor"); // No docstring in C++
     pose_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("import_localization_map", &rs2::pose_sensor::import_localization_map,
-             "Load SLAM localization map from host to device.", "lmap_buf"_a)
+             "Load relocalization map onto device. Only one relocalization map can be imported at a time; "
+             "any previously existing map will be overwritten.\n"
+             "The imported map exists simultaneously with the map created during the most recent tracking "
+             "session after start(),"
+             "and they are merged after the imported map is relocalized.\n"
+             "This operation must be done before start().", "lmap_buf"_a)
         .def("export_localization_map", &rs2::pose_sensor::export_localization_map,
-             "Extract SLAM localization map from device and store on host.")
+             "Get relocalization map that is currently on device, created and updated during most "
+             "recent tracking session.\n"
+             "Can be called before or after stop().")
         .def("set_static_node", &rs2::pose_sensor::set_static_node,
-             "Create a named reference frame anchored to a specific 3D pose.")
-        .def("get_static_node", &rs2::pose_sensor::get_static_node,
-             "Retrieve a named reference frame anchored to a specific 3D pose.")
+             "Creates a named virtual landmark in the current map, known as static node.\n"
+             "The static node's pose is provided relative to the origin of current coordinate system of device poses.\n"
+             "This function fails if the current tracker confidence is below 3 (high confidence).",
+             "guid"_a, "pos"_a, "orient"_a)
+        .def("get_static_node", [](const rs2::pose_sensor& self, const std::string& guid) {
+            rs2_vector pos;
+            rs2_quaternion orient;
+            bool res = self.get_static_node(guid, pos, orient);
+            return std::make_tuple(res, pos, orient);
+        }, "Gets the current pose of a static node that was created in the current map or in an imported map.\n"
+           "Static nodes of imported maps are available after relocalizing the imported map.\n"
+           "The static node's pose is returned relative to the current origin of coordinates of device poses.\n"
+           "Thus, poses of static nodes of an imported map are consistent with current device poses after relocalization.\n"
+           "This function fails if the current tracker confidence is below 3 (high confidence).",
+           "guid"_a)
+        .def("remove_static_node", &rs2::pose_sensor::remove_static_node,
+             "Removes a named virtual landmark in the current map, known as static node.\n"
+             "guid"_a)
         .def("__nonzero__", &rs2::pose_sensor::operator bool); // No docstring in C++
 
     py::class_<rs2::wheel_odometer, rs2::sensor> wheel_odometer(m, "wheel_odometer"); // No docstring in C++

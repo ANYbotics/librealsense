@@ -5,28 +5,6 @@ Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 #include "../include/any_librealsense2/hpp/rs_frame.hpp"
 
 void init_frame(py::module &m) {
-    // Support Python's buffer protocol
-    class BufData {
-    public:
-        void *_ptr = nullptr;         // Pointer to the underlying storage
-        size_t _itemsize = 0;         // Size of individual items in bytes
-        std::string _format;          // For homogeneous buffers, this should be set to format_descriptor<T>::format()
-        size_t _ndim = 0;             // Number of dimensions
-        std::vector<size_t> _shape;   // Shape of the tensor (1 entry per dimension)
-        std::vector<size_t> _strides; // Number of entries between adjacent entries (for each per dimension)
-    public:
-        BufData(void *ptr, size_t itemsize, const std::string& format, size_t ndim, const std::vector<size_t> &shape, const std::vector<size_t> &strides)
-            : _ptr(ptr), _itemsize(itemsize), _format(format), _ndim(ndim), _shape(shape), _strides(strides) {}
-        BufData(void *ptr, size_t itemsize, const std::string& format, size_t size)
-            : BufData(ptr, itemsize, format, 1, std::vector<size_t> { size }, std::vector<size_t> { itemsize }) { }
-        BufData(void *ptr, // Raw data pointer
-                size_t itemsize, // Size of the type in bytes
-                const std::string& format, // Data type's format descriptor (e.g. "@f" for float xyz)
-                size_t dim, // number of data elements per group (e.g. 3 for float xyz)
-                size_t count) // Number of groups
-            : BufData( ptr, itemsize, format, 2, std::vector<size_t> { count, dim }, std::vector<size_t> { itemsize*dim, itemsize })  { }
-    };
-
     py::class_<BufData> BufData_py(m, "BufData", py::buffer_protocol());
     BufData_py.def_buffer([](BufData& self)
     { return py::buffer_info(
@@ -229,7 +207,8 @@ void init_frame(py::module &m) {
 
     py::class_<rs2::depth_frame, rs2::video_frame> depth_frame(m, "depth_frame", "Extends the video_frame class with additional depth related attributes and functions.");
     depth_frame.def(py::init<rs2::frame>())
-        .def("get_distance", &rs2::depth_frame::get_distance, "x"_a, "y"_a, "Provide the depth in meters at the given pixel");
+        .def("get_distance", &rs2::depth_frame::get_distance, "x"_a, "y"_a, "Provide the depth in meters at the given pixel")
+        .def("get_units", &rs2::depth_frame::get_units, "Provide the scaling factor to use when converting from get_data() units to meters");
     
     // rs2::disparity_frame
     py::class_<rs2::disparity_frame, rs2::depth_frame> disparity_frame(m, "disparity_frame", "Extends the depth_frame class with additional disparity related attributes and functions.");
