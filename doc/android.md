@@ -11,7 +11,7 @@ The AAR file is responsible to acquire camera access permissions and it also pro
 > Previous Android solution was limited to rooted devices only, but is still available [here](https://github.com/IntelRealSense/librealsense/tree/v2.18.1/doc/android)
 
 ## Ingredients
-Before jumping to the instructions section please ensure you have all the required accessories. 
+Before jumping to the instructions section please ensure you have all the required accessories.
 1. Android target device with Android version >= 4.4 that supports OTG feature.
 2. [Android Studio IDE](https://developer.android.com/studio).
 3. [USB3 OTG](https://en.wikipedia.org/wiki/USB_On-The-Go) cable.
@@ -19,11 +19,10 @@ Before jumping to the instructions section please ensure you have all the requir
 ## Build A RealSense Application
 We provide two stand alone examples that demonstrates how to link with librealsense AAR from the maven repository.
 These two examples focus on the grudle configuration and contains minimal code.
-Follow the [Java example](../wrappers/android/examples/java_example/readme.md) or [Native example](../wrappers/android/examples/native_example/readme.md) for more details.
-You can also [build RealSense AAR from source](../wrappers/android/readme.md) and add the generated AAR as a dependency as described [here](https://developer.android.com/studio/projects/android-library#AddDependency).
+Follow the [Java example](../wrappers/android/examples/java_example/README.md) or [Native example](../wrappers/android/examples/native_example/README.md) for more details.
+You can also [build RealSense AAR from source](../wrappers/android/README.md) and add the generated AAR as a dependency as described [here](https://developer.android.com/studio/projects/android-library#AddDependency).
 Graphical Java examples such as 'capture', 'recording' and 'playback' are available in the examples folder as part of the Android wrapper project.
 
-Below is an [example](https://play.google.com/store/apps/details?id=com.intel.realsense.camera) of an application with librealsense on the android platform. 
+Below is an [example](https://play.google.com/store/apps/details?id=com.intel.realsense.camera) of an application with librealsense on the android platform.
 
 ![](img/realsense-android.png)
-

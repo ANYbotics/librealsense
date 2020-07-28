@@ -13,7 +13,7 @@
 
 ## Documentation
 
-* [Depth from Stereo](depth-from-stereo.md) - Tutorial introducing users to depth from stereo technology 
+* [Depth from Stereo](depth-from-stereo.md) - Tutorial introducing users to depth from stereo technology
 * [API Architecture](api_arch.md) - Overview of the high-level concepts
 * [C API](../include/librealsense2) - With doxygen-style API comments
   * [Latest Doxygen Output](http://intelrealsense.github.io/librealsense/doxygen/annotated.html)
@@ -34,4 +34,4 @@
   * [D400 cameras on **rooted** Android devices](./android.md) - Instructions of how to build the RealSense SDK for Android OS.
   * [D435i depth camera with IMU](./d435i.md) - An introduction to the D435i depth camera and it's IMU
   * [T265 tracking module](./t265.md) - An introduction to the T265 tracking module
-* [Record and Playback](../src/media/readme.md) - SDK Record and Playback functionality using ROS-bag file format
+* [Record and Playback](../src/media/README.md) - SDK Record and Playback functionality using ROS-bag file format

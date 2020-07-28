@@ -2,7 +2,7 @@
 
 # Sample Code for Intel® RealSense™ **Depth** cameras
 
-This is a subset of SDK examples, for full list see [readme.md](./readme.md)
+This is a subset of SDK examples, for full list see [README.md](./README.md)
 
 ## List of Examples:
 

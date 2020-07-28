@@ -1,8 +1,8 @@
-#  Native RealSense Application for Android 
+#  Native RealSense Application for Android
 This sample demonstrates how to configure an Android application to add a RealSense dependency.  
 The sample also demonstrates basic streaming using the Pipeline class and how to respond to connection events of a RealSense device.
 
-> Read about Android support [here](../../readme.md).
+> Read about Android support [here](../../README.md).
 
 ## Project Configuration
 Before jumping to the code, let's review the required modifications both for the module [build.gradle file](app/build.gradle) and to the app's manifest.

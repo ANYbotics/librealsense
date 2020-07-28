@@ -8,7 +8,7 @@
 #include "l500/l500-depth.h"
 #include "proc/disparity-transform.h"
 #include "proc/decimation-filter.h"
-#include "proc/threshold.h" 
+#include "proc/threshold.h"
 #include "proc/spatial-filter.h"
 #include "proc/temporal-filter.h"
 #include "proc/hole-filling-filter.h"
@@ -559,7 +559,7 @@ namespace librealsense
         else
         {
             assert(msg.getTopic().find("pose/transform") != std::string::npos); // Assuming that the samples iterator of the reader only reads the pose/transform topic
-                                                                                // and we will be reading the rest in here (see ../readme.md#Topics under Pose-Data for more information
+                                                                                // and we will be reading the rest in here (see ../README.md#Topics under Pose-Data for more information
             auto transform_msg = instantiate_msg<geometry_msgs::Transform>(msg);
 
             auto stream_id = ros_topic::get_stream_identifier(msg.getTopic());

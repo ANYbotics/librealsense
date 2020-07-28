@@ -1,8 +1,8 @@
-#  Java RealSense Application for Android 
+#  Java RealSense Application for Android
 This sample demonstrates how to configure an Android application to add a RealSense dependency.  
 The sample also demonstrates basic streaming using the Pipeline class and how to respond to connection events of a RealSense device.
 
-> Read about Android support [here](../../readme.md).
+> Read about Android support [here](../../README.md).
 
 ## Project Configuration
 Before jumping to the code, let's review the required modifications both for the module [`build.gradle file`](app/build.gradle) and to the app's manifest.
@@ -40,7 +40,7 @@ This permission is required by Androis >= 9, for apps that target lower Android 
 ## Example Code
 Let's look at the only source code file in this example, the [MainActivity](app/src/main/java/com/example/realsense_java_example/MainActivity.java).
 
-> **Note:** Since the SDK is holding-on to native hardware resources, it is critical to make sure you deterministically call `close` on objects, especially those derived from `Frame`. Without releasing resources explicitly the Garbage Collector will not keep-up with new frames being allocated. Take advantage of `try(){}` whenever you work with frames. 
+> **Note:** Since the SDK is holding-on to native hardware resources, it is critical to make sure you deterministically call `close` on objects, especially those derived from `Frame`. Without releasing resources explicitly the Garbage Collector will not keep-up with new frames being allocated. Take advantage of `try(){}` whenever you work with frames.
 
 ### On Create
 `RsContext.init` must be called once in the application's lifetime before any interaction with physical RealSense devices.

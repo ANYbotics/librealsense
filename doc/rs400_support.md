@@ -82,12 +82,12 @@ stream.start([](rs2::frame) {});
 * **librealsense2** will be shipped with a built-in [Python Wrapper](../wrappers/python/) for easier integration.
 * New [troubleshooting tools](../tools/) are now part of the package, including a tool for hardware log collection.
 * **librealsense2** is capable of handling device disconnects and the discovery of new devices at runtime.
-* [Playback & Record](../src/media/readme.md) functionality is available out-of-the-box. 
+* [Playback & Record](../src/media/README.md) functionality is available out-of-the-box.
 
 ## Transition to CMake
 **librealsense2** does not provide hand-written Visual Studio, QT-Creator and XCode project files as you can build **librealsense** with the IDE of your choice using portable CMake scripts.  
 
 ## Intel® RealSense™ RS400 and the Linux Kernel
 
-* The Intel® RealSense™ RS400 series (starting with kernel 4.4.0.59) does not require any kernel patches for streaming 
+* The Intel® RealSense™ RS400 series (starting with kernel 4.4.0.59) does not require any kernel patches for streaming
 * Advanced camera features may still require kernel patches. Currently, getting **hardware timestamps** is dependent on a patch that has not yet been up-streamed. Without the patch applied you can still use the camera but you will receive a system-time instead of an optical timestamp.
