@@ -38,6 +38,9 @@
   <depend>opengl</depend>
   <depend>gtk3</depend>
 
+<!--   <test_depend>cmake_code_coverage</test_depend> -->
+  <test_depend>gtest</test_depend>
+
   <!-- <export>
     <build_type>cmake</build_type>
   </export> -->
