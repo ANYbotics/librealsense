@@ -30,7 +30,8 @@ namespace librealsense
             z_max(Z_MAX_VALUE),
             ir_min(IR_MIN_VALUE),
             threshold_offset(THRESHOLD_OFFSET),
-            threshold_scale(THRESHOLD_SCALE)
+            threshold_scale(THRESHOLD_SCALE),
+            read_baseline(false)
         {}
 
         uint8_t                 ir_threshold;
@@ -48,7 +49,7 @@ namespace librealsense
     class zero_order : public generic_processing_block
     {
     public:
-        zero_order();
+        zero_order(std::shared_ptr<bool_option> is_enabled_opt = nullptr);
 
         rs2::frame process_frame(const rs2::frame_source& source, const rs2::frame& f) override;
 
@@ -61,18 +62,19 @@ namespace librealsense
 
         std::pair<int, int> get_zo_point(const rs2::frame& frame);
 
-        rs2::stream_profile     _source_profile_depth;
-        rs2::stream_profile     _target_profile_depth;
+        rs2::stream_profile         _source_profile_depth;
+        rs2::stream_profile         _target_profile_depth;
 
-        rs2::stream_profile     _source_profile_confidence;
-        rs2::stream_profile     _target_profile_confidence;
+        rs2::stream_profile         _source_profile_confidence;
+        rs2::stream_profile         _target_profile_confidence;
 
-        rs2::pointcloud         _pc;
+        rs2::pointcloud             _pc;
 
-        bool                    _first_frame;
+        bool                        _first_frame;
 
-        zero_order_options      _options;
-        ivcam2::intrinsic_params _resolutions_depth;
+        zero_order_options          _options;
+        std::weak_ptr<bool_option>  _is_enabled_opt;
+        ivcam2::intrinsic_params    _resolutions_depth;
     };
     MAP_EXTENSION(RS2_EXTENSION_ZERO_ORDER_FILTER, librealsense::zero_order);
 }

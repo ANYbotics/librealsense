@@ -15,6 +15,7 @@
 #include "proc/zero-order.h"
 #include <cstddef>
 #include "metadata-parser.h"
+#include "l500-options.h"
 
 #define MM_TO_METER 1/1000
 #define MIN_ALGO_VERSION 115
@@ -58,18 +59,20 @@ namespace librealsense
     {
         _calib_table_raw = [this]() { return get_raw_calibration_table(); };
 
-        get_depth_sensor().register_option(RS2_OPTION_LLD_TEMPERATURE,
+        auto& depth_sensor = get_depth_sensor();
+        auto& raw_depth_sensor = get_raw_depth_sensor();
+
+        depth_sensor.register_option(RS2_OPTION_LLD_TEMPERATURE,
             std::make_shared <l500_temperature_options>(_hw_monitor.get(), RS2_OPTION_LLD_TEMPERATURE));
 
-        get_depth_sensor().register_option(RS2_OPTION_MC_TEMPERATURE,
+        depth_sensor.register_option(RS2_OPTION_MC_TEMPERATURE,
             std::make_shared <l500_temperature_options>(_hw_monitor.get(), RS2_OPTION_MC_TEMPERATURE));
 
-        get_depth_sensor().register_option(RS2_OPTION_MA_TEMPERATURE,
+        depth_sensor.register_option(RS2_OPTION_MA_TEMPERATURE,
             std::make_shared <l500_temperature_options>(_hw_monitor.get(), RS2_OPTION_MA_TEMPERATURE));
 
-        get_depth_sensor().register_option(RS2_OPTION_APD_TEMPERATURE,
+        depth_sensor.register_option(RS2_OPTION_APD_TEMPERATURE,
             std::make_shared <l500_temperature_options>(_hw_monitor.get(), RS2_OPTION_APD_TEMPERATURE));
-
 
         environment::get_instance().get_extrinsics_graph().register_same_extrinsics(*_depth_stream, *_ir_stream);
         environment::get_instance().get_extrinsics_graph().register_same_extrinsics(*_depth_stream, *_confidence_stream);
@@ -77,31 +80,31 @@ namespace librealsense
         register_stream_to_extrinsic_group(*_depth_stream, 0);
         register_stream_to_extrinsic_group(*_ir_stream, 0);
 
-        auto error_control = std::unique_ptr<uvc_xu_option<int>>(new uvc_xu_option<int>(get_depth_sensor(), ivcam2::depth_xu, L500_ERROR_REPORTING, "Error reporting"));
+        auto error_control = std::unique_ptr<uvc_xu_option<int>>(new uvc_xu_option<int>(raw_depth_sensor, ivcam2::depth_xu, L500_ERROR_REPORTING, "Error reporting"));
 
         _polling_error_handler = std::unique_ptr<polling_error_handler>(
             new polling_error_handler(1000,
                 std::move(error_control),
-                get_depth_sensor().get_notifications_processor(),
+                raw_depth_sensor.get_notifications_processor(),
                 std::unique_ptr<notification_decoder>(new l500_notification_decoder())));
 
-        get_depth_sensor().register_option(RS2_OPTION_ERROR_POLLING_ENABLED, std::make_shared<polling_errors_disable>(_polling_error_handler.get()));
+        depth_sensor.register_option(RS2_OPTION_ERROR_POLLING_ENABLED, std::make_shared<polling_errors_disable>(_polling_error_handler.get()));
 
         // attributes of md_capture_timing
         auto md_prop_offset = offsetof(metadata_raw, mode) +
             offsetof(md_l500_depth, intel_capture_timing);
 
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP, make_uvc_header_parser(&platform::uvc_header::timestamp));
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_FRAME_COUNTER, make_attribute_parser(&l500_md_capture_timing::frame_counter, md_capture_timing_attributes::frame_counter_attribute, md_prop_offset));
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP, make_attribute_parser(&l500_md_capture_timing::sensor_timestamp, md_capture_timing_attributes::sensor_timestamp_attribute, md_prop_offset));
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_ACTUAL_FPS, make_attribute_parser(&l500_md_capture_timing::exposure_time, md_capture_timing_attributes::sensor_timestamp_attribute, md_prop_offset));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_FRAME_TIMESTAMP, make_uvc_header_parser(&platform::uvc_header::timestamp));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_FRAME_COUNTER, make_attribute_parser(&l500_md_capture_timing::frame_counter, md_capture_timing_attributes::frame_counter_attribute, md_prop_offset));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_SENSOR_TIMESTAMP, make_attribute_parser(&l500_md_capture_timing::sensor_timestamp, md_capture_timing_attributes::sensor_timestamp_attribute, md_prop_offset));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_ACTUAL_FPS, make_attribute_parser(&l500_md_capture_timing::exposure_time, md_capture_timing_attributes::sensor_timestamp_attribute, md_prop_offset));
 
         // attributes of md_depth_control
         md_prop_offset = offsetof(metadata_raw, mode) +
             offsetof(md_l500_depth, intel_depth_control);
 
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER, make_attribute_parser(&md_l500_depth_control::laser_power, md_l500_depth_control_attributes::laser_power, md_prop_offset));
-        get_depth_sensor().register_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE, make_attribute_parser(&md_l500_depth_control::laser_power_mode, md_rgb_control_attributes::manual_exp_attribute, md_prop_offset));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER, make_attribute_parser(&md_l500_depth_control::laser_power, md_l500_depth_control_attributes::laser_power, md_prop_offset));
+        depth_sensor.register_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE, make_attribute_parser(&md_l500_depth_control::laser_power_mode, md_rgb_control_attributes::manual_exp_attribute, md_prop_offset));
     }
 
     std::vector<tagged_profile> l500_depth::get_profiles_tags() const
@@ -132,7 +135,7 @@ namespace librealsense
         }
         else
         {
-            matchers.push_back(std::make_shared<frame_number_composite_matcher>(depth_matchers));
+            matchers.push_back(std::make_shared<timestamp_composite_matcher>(depth_matchers));
         }
 
         return std::make_shared<timestamp_composite_matcher>(matchers);
@@ -183,13 +186,14 @@ namespace librealsense
         return intrinsic->orient.depth_offset;
     }
 
-    rs2_time_t l500_timestamp_reader_from_metadata::get_frame_timestamp(const request_mapping& mode, const platform::frame_object& fo)
+    rs2_time_t l500_timestamp_reader_from_metadata::get_frame_timestamp(const std::shared_ptr<frame_interface>& frame)
     {
         std::lock_guard<std::recursive_mutex> lock(_mtx);
 
-        if (has_metadata_ts(fo))
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (has_metadata_ts(frame))
         {
-            auto md = (librealsense::metadata_raw*)(fo.metadata);
+            auto md = (librealsense::metadata_raw*)(f->additional_data.metadata_blob.data());
             return (double)(md->header.timestamp)*TIMESTAMP_USEC_TO_MSEC;
         }
         else
@@ -197,26 +201,27 @@ namespace librealsense
             if (!one_time_note)
             {
                 LOG_WARNING("UVC metadata payloads are not available for stream "
-                    << std::hex << mode.pf->fourcc << std::dec << (mode.profile.format)
+                    //<< std::hex << mode.pf->fourcc << std::dec << (mode.profile.format)
                     << ". Please refer to installation chapter for details.");
                 one_time_note = true;
             }
-            return _backup_timestamp_reader->get_frame_timestamp(mode, fo);
+            return _backup_timestamp_reader->get_frame_timestamp(frame);
         }
     }
 
-    unsigned long long l500_timestamp_reader_from_metadata::get_frame_counter(const request_mapping & mode, const platform::frame_object& fo) const
+    unsigned long long l500_timestamp_reader_from_metadata::get_frame_counter(const std::shared_ptr<frame_interface>& frame) const
     {
         std::lock_guard<std::recursive_mutex> lock(_mtx);
 
-        if (has_metadata_fc(fo))
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (has_metadata_fc(frame))
         {
-            auto md = (byte*)(fo.metadata);
+            auto md = (byte*)(f->additional_data.metadata_blob.data());
             // WA until we will have the struct of metadata
             return ((int*)md)[7];
         }
 
-        return _backup_timestamp_reader->get_frame_counter(mode, fo);
+        return _backup_timestamp_reader->get_frame_counter(frame);
     }
 
     void l500_timestamp_reader_from_metadata::reset()
@@ -227,38 +232,59 @@ namespace librealsense
         ts_wrap.reset();
     }
 
-    rs2_timestamp_domain l500_timestamp_reader_from_metadata::get_frame_timestamp_domain(const request_mapping & mode, const platform::frame_object& fo) const
+    rs2_timestamp_domain l500_timestamp_reader_from_metadata::get_frame_timestamp_domain(const std::shared_ptr<frame_interface>& frame) const
     {
         std::lock_guard<std::recursive_mutex> lock(_mtx);
 
-        return (has_metadata_ts(fo)) ? RS2_TIMESTAMP_DOMAIN_HARDWARE_CLOCK : _backup_timestamp_reader->get_frame_timestamp_domain(mode, fo);
+        return (has_metadata_ts(frame)) ? RS2_TIMESTAMP_DOMAIN_HARDWARE_CLOCK : _backup_timestamp_reader->get_frame_timestamp_domain(frame);
     }
 
     processing_blocks l500_depth_sensor::get_l500_recommended_proccesing_blocks()
     {
         processing_blocks res;
-        res.push_back(std::make_shared<zero_order>());
-        auto depth_standart = get_depth_recommended_proccesing_blocks();
-        res.insert(res.end(), depth_standart.begin(), depth_standart.end());
-        res.push_back(std::make_shared<threshold>());
-        res.push_back(std::make_shared<spatial_filter>());
         res.push_back(std::make_shared<temporal_filter>());
-        res.push_back(std::make_shared<hole_filling_filter>());
         return res;
     }
 
     void l500_depth_sensor::start(frame_callback_ptr callback)
     {
-        if(_depth_invalidation_enabled)
-            uvc_sensor::start(std::make_shared<frame_validator>(shared_from_this(), callback, _user_requests, _validator_requests));
-        else
-            uvc_sensor::start(callback);
+        _action_delayer.do_after_delay([&]() {
+            if (_depth_invalidation_enabled)
+                synthetic_sensor::start(std::make_shared<frame_validator>(shared_from_this(), callback, _user_requests, _validator_requests));
+            else
+                synthetic_sensor::start(callback);
+        });
     }
 
     void l500_depth_sensor::stop()
     {
-        uvc_sensor::stop();
-        _depth_invalidation_option->set_streaming(false);
+        _action_delayer.do_after_delay([&]() {
+            synthetic_sensor::stop();
+            _depth_invalidation_option->set_streaming(false);
+        });
+    }
+
+    rs2_sensor_mode get_resolution_from_width_height(int width, int height)
+    {
+        if ((width == 640 && height == 480) || (width == 480  && height == 640))
+            return RS2_SENSOR_MODE_VGA;
+        else if ((width == 1024 && height == 768) || (width == 768 && height == 1024))
+            return RS2_SENSOR_MODE_XGA;
+        else
+            throw std::runtime_error(to_string() << "Invalid resolution " << width << "x" << height);
+    }
+
+    bool stream_profiles_correspond(stream_profile_interface* l, stream_profile_interface* r)
+    {
+        auto vl = dynamic_cast<video_stream_profile_interface*>(l);
+        auto vr = dynamic_cast<video_stream_profile_interface*>(r);
+
+        if (!vl || !vr)
+            return false;
+
+        return  l->get_framerate() == r->get_framerate() &&
+            vl->get_width() == vr->get_width() &&
+            vl->get_height() == vr->get_height();
     }
 
     void l500_depth_sensor::open(const stream_profiles& requests)
@@ -285,12 +311,12 @@ namespace librealsense
 
                     auto user_request_profile = dynamic_cast<video_stream_profile*>(user_request->get());
 
-                    auto sp = uvc_sensor::get_stream_profiles();
+                    auto sp = synthetic_sensor::get_stream_profiles();
 
                     auto corresponding_ir = std::find_if(sp.begin(), sp.end(), [&](std::shared_ptr<stream_profile_interface> sp)
                     {
                         auto vs = dynamic_cast<video_stream_profile*>(sp.get());
-                        return sp->get_stream_type() == RS2_STREAM_INFRARED && frame_validator::stream_profiles_correspond(sp.get(), user_request_profile);
+                        return sp->get_stream_type() == RS2_STREAM_INFRARED && stream_profiles_correspond(sp.get(), user_request_profile);
                     });
 
                     if (corresponding_ir == sp.end())
@@ -305,7 +331,55 @@ namespace librealsense
                 _validator_requests = requests;
             }
 
-            uvc_sensor::open(_validator_requests);
+            auto dp = std::find_if(requests.begin(), requests.end(), [](std::shared_ptr<stream_profile_interface> sp)
+            {return sp->get_stream_type() == RS2_STREAM_DEPTH;});
+
+            if( supports_option( RS2_OPTION_VISUAL_PRESET ) )
+            {
+                // We want to set the default preset to Max Range (make sure laser power is 100%)
+                // NOTE: This becomes the "default", meaning that in the viewer the user will see "default"
+                // (with power at 88, set by FW!) and, when the sensor is turned on, it will change to Max
+                // Power (with power at 100, again by FW). It's weird but acceptable.
+                // (see RS5-7780)
+                try
+                {
+                    auto&& preset_option = get_option( RS2_OPTION_VISUAL_PRESET );
+                    if( preset_option.query() == RS2_L500_VISUAL_PRESET_DEFAULT )
+                    {
+                        LOG_INFO( "Switching visual preset to MAX_RANGE by default" );
+                        preset_option.set( RS2_L500_VISUAL_PRESET_MAX_RANGE );
+                    }
+                }
+                catch( std::exception const & e )
+                {
+                    LOG_ERROR( "Caught exception while trying to set Max Range preset: " << e.what() );
+                }
+                catch( ... )
+                {
+                    LOG_ERROR( "Caught unknown exception while trying to set Max Range preset!" );
+                }
+            }
+
+            if (dp != requests.end() && supports_option(RS2_OPTION_SENSOR_MODE))
+            {
+                auto&& sensor_mode_option = get_option(RS2_OPTION_SENSOR_MODE);
+                auto vs = dynamic_cast<video_stream_profile*>((*dp).get());
+                if (supports_option(RS2_OPTION_VISUAL_PRESET))
+                {
+                    auto&& preset_option = get_option(RS2_OPTION_VISUAL_PRESET);
+                    if (preset_option.query() == RS2_L500_VISUAL_PRESET_CUSTOM)
+                    {
+                        if(sensor_mode_option.query() != get_resolution_from_width_height(vs->get_width(), vs->get_height()))
+                            throw  std::runtime_error(to_string() << "sensor mode option ("<< sensor_mode_option.query()<<") is incompatible with requested resolution ("
+                                << get_resolution_from_width_height(vs->get_width(), vs->get_height())<<")");
+                    }
+                }
+                
+                sensor_mode_option.set(get_resolution_from_width_height(vs->get_width(), vs->get_height()));
+            }
+
+
+            synthetic_sensor::open(_validator_requests);
         }
         catch (...)
         {

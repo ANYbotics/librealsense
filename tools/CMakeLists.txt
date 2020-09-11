@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 # View the makefile commands during build
 #set(CMAKE_VERBOSE_MAKEFILE on)
 
-set(DEPENDENCIES ${DEPENDENCIES} any_realsense2)
+set(DEPENDENCIES ${DEPENDENCIES} realsense2)
 
 add_subdirectory(convert)
 add_subdirectory(enumerate-devices)
@@ -17,6 +17,12 @@ add_subdirectory(fw-logger)
 add_subdirectory(terminal)
 add_subdirectory(recorder)
 add_subdirectory(fw-update)
+
+if(NOT WIN32)
+    if(BUILD_NETWORK_DEVICE)
+        add_subdirectory(rs-server)
+    endif()
+endif()
 
 if(BUILD_GRAPHICAL_EXAMPLES)
     include(${CMAKE_SOURCE_DIR}/CMake/opengl_config.cmake)

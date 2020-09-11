@@ -3,7 +3,10 @@ cmake_minimum_required(VERSION 3.1.0)
 project(any_librealsense2 LANGUAGES CXX C)
 
 include(CMake/lrs_options.cmake)
-include(CMake/connectivity_check.cmake)
+
+# Internet connectivity.
+# include(CMake/connectivity_check.cmake)
+set(INTERNET_CONNECTION OFF)
 
 #Deprecation message, should be removed in future releases
 if(${FORCE_LIBUVC} OR ${FORCE_WINUSB_UVC} OR ${ANDROID_USB_HOST_UVC})
@@ -17,7 +20,7 @@ if(BUILD_WITH_TM2 AND NOT INTERNET_CONNECTION)
     set(BUILD_WITH_TM2 OFF)
 endif()
 
-# Checking Internet connection, as TM2 needs to download the FW from amazon cloud
+# Checking Internet connection, as DEPTH CAM needs to download the FW from amazon cloud
 if(IMPORT_DEPTH_CAM_FW AND NOT INTERNET_CONNECTION)
     message(WARNING "No internet connection, disabling IMPORT_DEPTH_CAM_FW")
     set(IMPORT_DEPTH_CAM_FW OFF)
@@ -28,6 +31,9 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/CMake)
 # include librealsense general configuration
 include(CMake/global_config.cmake)
 
+# Building examples is disabled by default.
+# If you need to enable it back, enable the graphical depends from this library
+# by uncommenting them in the package.xml.
 set(BUILD_CV_KINFU_EXAMPLE FALSE)
 set(BUILD_EXAMPLES FALSE)
 set(BUILD_GRAPHICAL_EXAMPLES FALSE)
@@ -80,7 +86,7 @@ os_target_config()
 # macro definition located at "CMake/global_config.cmake"
 global_target_config()
 
-include(CMake/install_config.cmake)
+include(CMake/catkin_install_config.cmake)
 
 add_subdirectory(wrappers)
 
@@ -101,6 +107,11 @@ endif()
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(unit-tests)
+endif()
+
+if(BUILD_NETWORK_DEVICE)
+    add_subdirectory(src/ethernet)
+    add_subdirectory(src/compression)
 endif()
 
 if(BUILD_WITH_TM2)
@@ -131,8 +142,6 @@ install(
 ##   Test   ##
 ##############
 if(CATKIN_ENABLE_TESTING)
-  find_package(catkin REQUIRED)
-
   catkin_add_gtest(test_${PROJECT_NAME}
     test/empty_test.cpp
   )
@@ -157,5 +166,5 @@ if(CATKIN_ENABLE_TESTING)
       TEST_BUILD_TARGETS
         test_${PROJECT_NAME}
     )
-  endif()
+  endif(cmake_code_coverage_FOUND)
 endif()

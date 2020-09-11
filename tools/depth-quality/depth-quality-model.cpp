@@ -11,8 +11,11 @@ namespace rs2
 {
     namespace depth_quality
     {
-        tool_model::tool_model()
-            : _update_readonly_options_timer(std::chrono::seconds(6)), _roi_percent(0.4f),
+        tool_model::tool_model(rs2::context &ctx)
+            : _ctx(ctx),
+              _pipe(ctx),
+              _viewer_model(ctx),
+              _update_readonly_options_timer(std::chrono::seconds(6)), _roi_percent(0.4f),
               _roi_located(std::chrono::seconds(4)),
               _too_close(std::chrono::seconds(4)),
               _too_far(std::chrono::seconds(4)),
@@ -685,12 +688,12 @@ namespace rs2
                         static float prev_metric_angle = 0;
                         if (_viewer_model.paused)
                         {
-                            ImGui::Text("%.2f mm", prev_metric_angle);
+                            ImGui::Text("%.2f deg", prev_metric_angle);
                         }
                         else
                         {
                             auto curr_metric_angle = _metrics_model.get_last_metrics().angle;
-                            ImGui::Text("%.2f mm", curr_metric_angle);
+                            ImGui::Text("%.2f deg", curr_metric_angle);
                             prev_metric_angle = curr_metric_angle;
                         }
 
@@ -791,8 +794,8 @@ namespace rs2
             _device_model->allow_remove = false;
             _device_model->show_depth_only = true;
             _device_model->show_stream_selection = false;
-            _depth_sensor_model = std::shared_ptr<rs2::subdevice_model>(
-                new subdevice_model(dev, dpt_sensor, _error_message, _viewer_model));
+            std::shared_ptr< atomic_objects_in_frame > no_detected_objects;
+            _depth_sensor_model = std::make_shared<rs2::subdevice_model>(dev, dpt_sensor, no_detected_objects, _error_message, _viewer_model);
 
             _depth_sensor_model->draw_streams_selector = false;
             _depth_sensor_model->draw_fps_selector = true;
@@ -1146,9 +1149,12 @@ namespace rs2
 
             // Generate columns header
             csv << "\nSample Id,Frame #,Timestamp (ms),";
-            for (auto&& matric : _metric_data)
+            auto records_data = _metric_data;
+            // Plane Fit RMS error will have dual representation both as mm and % of the range
+            records_data.push_back({ "Plane Fit RMS Error mm" , "" });
+            for (auto&& metric : records_data)
             {
-                csv << matric.name << " " << matric.units << ",";
+                csv << metric.name << " " << metric.units << ",";
             }
             csv << std::endl;
 
@@ -1157,10 +1163,11 @@ namespace rs2
             for (auto&& it: _samples)
             {
                 csv << i++ << ","<< it.frame_number << "," << std::fixed << std::setprecision(4) << it.timestamp << ",";
-                for (auto&& matric : _metric_data)
+                for (auto&& metric : records_data)
                 {
-                    auto samp = std::find_if(it.samples.begin(), it.samples.end(), [&](single_metric_data s) {return s.name == matric.name; });
-                    if(samp != it.samples.end())  csv << samp->val << ",";
+                    auto samp = std::find_if(it.samples.begin(), it.samples.end(), [&](single_metric_data s) {return s.name == metric.name; });
+                    if (samp != it.samples.end()) csv << samp->val;
+                    csv << ",";
                 }
                 csv << std::endl;
             }
@@ -1206,14 +1213,14 @@ namespace rs2
                     //Capture raw frame
                     auto filename = filename_base + "_" + stream_desc + "_" + fn.str() + ".raw";
                     if (!save_frame_raw_data(filename, original_frame))
-                        _viewer_model.not_model.add_notification(notification_data{ to_string() << "Failed to save frame raw data  " << filename,
+                        _viewer_model.not_model->add_notification(notification_data{ to_string() << "Failed to save frame raw data  " << filename,
                             RS2_LOG_SEVERITY_INFO, RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
 
 
                     // And the frame's attributes
                     filename = filename_base + "_" + stream_desc + "_" + fn.str() + "_metadata.csv";
                     if (!frame_metadata_to_csv(filename, original_frame))
-                        _viewer_model.not_model.add_notification(notification_data{ to_string() << "Failed to save frame metadata file " << filename,
+                        _viewer_model.not_model->add_notification(notification_data{ to_string() << "Failed to save frame metadata file " << filename,
                             RS2_LOG_SEVERITY_INFO, RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR });
 
                 }
@@ -1233,8 +1240,13 @@ namespace rs2
                     }
                 }
 
-                if (ply_texture )
-                    export_to_ply(filename_base + "_" + fn.str() + "_3d_mesh.ply", _viewer_model.not_model, frames, ply_texture, false);
+                if (ply_texture)
+                {
+                    auto fname = filename_base + "_" + fn.str() + "_3d_mesh.ply";
+                    std::unique_ptr<rs2::filter> exporter;
+                    exporter = std::unique_ptr<rs2::filter>(new rs2::save_to_ply(fname));
+                    export_frame(fname, std::move(exporter), *_viewer_model.not_model, frames, false);
+                }
             }
         }
 

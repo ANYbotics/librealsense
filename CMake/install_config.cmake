@@ -15,37 +15,41 @@ configure_package_config_file(CMake/realsense2Config.cmake.in realsense2Config.c
 )
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake" "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake" IMMEDIATE @ONLY)
-configure_file(config/librealsense.pc.in config/realsense2.pc @ONLY)
+configure_file(config/librealsense.pc.in config/any_librealsense2.pc @ONLY)
 
+# Library.
 install(TARGETS ${LRS_TARGET}
     EXPORT realsense2Targets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/any_librealsense2/
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/any_librealsense2/
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/any_librealsense2/
-    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include/any_librealsense2"
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include/"
 )
 
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/any_librealsense2
+# Headers.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/any_librealsense2/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/any_librealsense2/
 )
 
+# Library files list.
 install(EXPORT realsense2Targets
         FILE realsense2Targets.cmake
         NAMESPACE ${LRS_TARGET}::
-        DESTINATION ${CMAKECONFIG_INSTALL_DIR}/any_librealsense2/
+        DESTINATION ${CMAKECONFIG_INSTALL_DIR}
 )
 
+# CMake config files.
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/realsense2Config.cmake"
-        DESTINATION ${CMAKECONFIG_INSTALL_DIR}/any_librealsense2/
+        DESTINATION ${CMAKECONFIG_INSTALL_DIR}
 )
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/realsense2ConfigVersion.cmake"
-        DESTINATION ${CMAKECONFIG_INSTALL_DIR}/any_librealsense2/
+        DESTINATION ${CMAKECONFIG_INSTALL_DIR}
 )
 
 # Set library pkgconfig file for facilitating 3rd party integration
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/config/realsense2.pc"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig/any_librealsense2/"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/config/any_librealsense2.pc"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
 )
 
 install(CODE "execute_process(COMMAND ldconfig)")

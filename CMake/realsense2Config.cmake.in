@@ -9,4 +9,4 @@ set(realsense2_VERSION ${realsense2_VERSION_MAJOR}.${realsense2_VERSION_MINOR}.$
 set_and_check(realsense2_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
 
 include("${CMAKE_CURRENT_LIST_DIR}/realsense2Targets.cmake")
-set(realsense2_LIBRARY realsense2::realsense2)
+set(any_realsense2_LIBRARY any_realsense2::any_realsense2)

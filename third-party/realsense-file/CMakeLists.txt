@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.9)
 
-project(realsense-file)
+project(any_realsense-file)
 
 include(config.cmake)
 
@@ -44,11 +44,12 @@ target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-parameter -Wno-deprec
 
 set_target_properties (${PROJECT_NAME} PROPERTIES FOLDER Library)
 
-set(CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/../cmake/realsense2")
+# set(CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/../cmake/realsense2")
 
-install(TARGETS ${PROJECT_NAME}
-    EXPORT realsense2Targets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/any_librealsense2/
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/any_librealsense2/
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/any_librealsense2/
-)
+# install(TARGETS ${PROJECT_NAME}
+#     EXPORT realsense2Targets
+#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+# )
+# Above block commented out due to incompatibility with standard Catkin install.

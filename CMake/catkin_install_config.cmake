@@ -1,0 +1,16 @@
+# Library.
+install(
+    TARGETS
+        ${LRS_TARGET}
+        any_realsense-file
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+# Install header files
+install(
+    DIRECTORY
+        include/any_librealsense2/
+    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)

@@ -6,6 +6,8 @@
 #include <vector>
 #include <mutex>
 #include <string>
+#include <map>
+
 #include "l500-device.h"
 #include "context.h"
 #include "backend.h"
@@ -15,6 +17,7 @@
 #include "l500-private.h"
 #include "error-handling.h"
 #include "frame-validator.h"
+#include "l500-options.h"
 
 namespace librealsense
 {
@@ -80,14 +83,18 @@ namespace librealsense
         float _baseline;
     };
 
-    class l500_depth_sensor : public uvc_sensor, public video_sensor_interface, public virtual depth_sensor, public virtual l500_depth_sensor_interface
+    class l500_depth_sensor : public synthetic_sensor, public video_sensor_interface, public virtual depth_sensor, public virtual l500_depth_sensor_interface
     {
     public:
-        explicit l500_depth_sensor(l500_device* owner, std::shared_ptr<platform::uvc_device> uvc_device,
-            std::unique_ptr<frame_timestamp_reader> timestamp_reader)
-            : uvc_sensor("L500 Depth Sensor", uvc_device, move(timestamp_reader), owner), _owner(owner),
-              _depth_invalidation_enabled(false)
+        explicit l500_depth_sensor(l500_device* owner, std::shared_ptr<uvc_sensor> uvc_sensor, std::map<uint32_t,rs2_format> l500_depth_fourcc_to_rs2_format_map, std::map<uint32_t, rs2_stream> l500_depth_fourcc_to_rs2_stream_map)
+            : synthetic_sensor("L500 Depth Sensor", uvc_sensor, owner, l500_depth_fourcc_to_rs2_format_map, l500_depth_fourcc_to_rs2_stream_map), _owner(owner)
         {
+#ifdef ENABLE_L500_DEPTH_INVALIDATION
+          _depth_invalidation_enabled = true;
+#else
+          _depth_invalidation_enabled = false;
+#endif
+           
             register_option(RS2_OPTION_DEPTH_UNITS, std::make_shared<const_value_option>("Number of meters represented by a single depth unit",
                 lazy<float>([&]() {
                 return read_znorm(); })));
@@ -110,13 +117,30 @@ namespace librealsense
                         << "Unsupported depth invalidation enabled " << val << " is out of range.");
             });
 
-            register_option(static_cast<rs2_option>(RS2_OPTION_DEPTH_INVALIDATION_ENABLE), _depth_invalidation_option);
+            // The depth invalidation enable option is deprecated for now.
+            //register_option(static_cast<rs2_option>(RS2_OPTION_DEPTH_INVALIDATION_ENABLE), _depth_invalidation_option);
+        }
 
+        std::vector<rs2_option> get_supported_options() const override
+        {
+            std::vector<rs2_option> options;
+            for (auto opt : _options)
+            {
+                if (std::find_if(_owner->_advanced_options.begin(), _owner->_advanced_options.end(), [opt](rs2_option o) { return o == opt.first;}) != _owner->_advanced_options.end())
+                    continue;
+
+                 options.push_back(opt.first);
+            }
+
+            for (auto option : _owner->_advanced_options)
+                options.push_back(option);
+
+            return options;
         }
 
         virtual const char* get_option_name(rs2_option option) const override
         {
-            if(option == RS2_OPTION_DEPTH_INVALIDATION_ENABLE)
+            if(option == static_cast<rs2_option>(RS2_OPTION_DEPTH_INVALIDATION_ENABLE))
             {
                 static const std::string str = make_less_screamy("DEPTH_INVALIDATION_ENABLE");
                 return str.c_str();
@@ -161,8 +185,8 @@ namespace librealsense
         {
             auto lock = environment::get_instance().get_extrinsics_graph().lock();
 
-            auto results = uvc_sensor::init_stream_profiles();
-            for (auto p : results)
+            auto&& results = synthetic_sensor::init_stream_profiles();
+            for (auto&& p : results)
             {
                 // Register stream types
                 if (p->get_stream_type() == RS2_STREAM_DEPTH)
@@ -179,9 +203,9 @@ namespace librealsense
                 }
 
                 // Register intrinsics
-                auto video = dynamic_cast<video_stream_profile_interface*>(p.get());
+                auto&& video = dynamic_cast<video_stream_profile_interface*>(p.get());
 
-                auto profile = to_profile(p.get());
+                const auto&& profile = to_profile(p.get());
                 std::weak_ptr<l500_depth_sensor> wp =
                     std::dynamic_pointer_cast<l500_depth_sensor>(this->shared_from_this());
 
@@ -197,6 +221,7 @@ namespace librealsense
 
             return results;
         }
+        
 
         
 
@@ -243,12 +268,12 @@ namespace librealsense
         void stop() override;
         float get_depth_offset() const;
     private:
+        action_delayer _action_delayer;
         const l500_device* _owner;
         float _depth_units;
         stream_profiles _user_requests;
         stream_profiles _validator_requests;
         bool _depth_invalidation_enabled;
         std::shared_ptr<depth_invalidation_option> _depth_invalidation_option;
-
     };
 }
