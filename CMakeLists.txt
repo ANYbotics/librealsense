@@ -2,6 +2,8 @@
 cmake_minimum_required(VERSION 3.1.0)
 project(any_librealsense2 LANGUAGES CXX C)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(CMake/lrs_options.cmake)
 
 # Internet connectivity.
@@ -168,3 +170,13 @@ if(CATKIN_ENABLE_TESTING)
     )
   endif(cmake_code_coverage_FOUND)
 endif()
+
+#################
+## Clang_tools ##
+#################
+find_package(cmake_clang_tools QUIET)
+if(cmake_clang_tools_FOUND)
+  add_default_clang_tooling(
+    DISABLE_CLANG_FORMAT
+  )
+endif(cmake_clang_tools_FOUND)
