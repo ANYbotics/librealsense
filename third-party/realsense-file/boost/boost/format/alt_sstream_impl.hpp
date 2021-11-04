@@ -18,7 +18,7 @@ namespace boost {
 // --- Implementation  ------------------------------------------------------//
 
         template<class Ch, class Tr, class Alloc>
-        void basic_altstringbuf<Ch, Tr, Alloc>:: 
+        void basic_altstringbuf<Ch, Tr, Alloc>::
         clear_buffer () {
             const Ch * p = pptr();
             const Ch * b = pbase();
@@ -173,7 +173,7 @@ namespace boost {
                 return (pos_type(off));
             }
             else {
-                BOOST_ASSERT(0); // §27.4.3.2 allows undefined-behaviour here
+                BOOST_ASSERT(0); // 27.4.3.2 allows undefined-behaviour here
                 return pos_type(off_type(-1));
             }
         }

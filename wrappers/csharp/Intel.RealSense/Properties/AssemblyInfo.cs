@@ -13,7 +13,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Intel(R) Corporation")]
 [assembly: AssemblyProduct("Intel(R) RealSense(TM) SDK C# Wrapper")]
-[assembly: AssemblyCopyright("Copyright © 2017, Intel Corporation. All rights reserved")]
+[assembly: AssemblyCopyright("Copyright Â© 2017, Intel Corporation. All rights reserved")]
 [assembly: AssemblyTrademark("Intel(R) RealSense(TM)")]
 [assembly: AssemblyCulture("")]
 
