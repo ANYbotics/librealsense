@@ -35,6 +35,8 @@
   <depend>dkms</depend>
   <depend>udev</depend>
 
+  <exec_depend>rsync</exec_depend>
+
   <!-- This library examples depend on graphical library sources.
        The examples are not deployed on the robot so this dependency
        is disabled by default. If you need to enable examples back,
