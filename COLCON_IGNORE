@@ -1,3 +1,0 @@
-# This directory is ignored by colcon to prevent conflicts with the newer librealsense package
-# in realsense_ros2/librealsense when building ROS2 packages.
-# The ROS2 packages require librealsense2 version 2.56.5, which is provided by the newer package. 
